@@ -11,7 +11,7 @@
         <version>1.0</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
-    <artifactId>bx-notification-service</artifactId>
+    <artifactId>bx-notification-service-aws</artifactId>
     <version>${project.parent.version}</version>
     <name>bx-notification</name>
     <description>Production-ready notification system with outbox pattern</description>
@@ -29,7 +29,7 @@
     <dependencies>
         <dependency>
             <groupId>com.tsu</groupId>
-            <artifactId>bx-api</artifactId>
+            <artifactId>bx-notification</artifactId>
             <version>${parent.version}</version>
         </dependency>
         <dependency>
