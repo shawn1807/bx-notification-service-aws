@@ -1,0 +1,1 @@
+${i18n("otp.sms.message", code, expiryMinutes?c, appName)}

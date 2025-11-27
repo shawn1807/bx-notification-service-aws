@@ -1,0 +1,350 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: notification-system
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notification-config
+  namespace: notification-system
+data:
+  application.yaml: |
+    spring:
+      datasource:
+        url: jdbc:postgresql://postgres-service:5432/notifications
+        username: ${DB_USERNAME}
+        password: ${DB_PASSWORD}
+        hikari:
+          maximum-pool-size: 20
+          minimum-idle: 5
+          connection-timeout: 30000
+          idle-timeout: 600000
+          max-lifetime: 1800000
+
+      jpa:
+        hibernate:
+          ddl-auto: validate
+        properties:
+          hibernate:
+            dialect: org.hibernate.dialect.PostgreSQLDialect
+            jdbc:
+              batch_size: 20
+            order_inserts: true
+            order_updates: true
+
+    logging:
+      level:
+        com.bx.notification: INFO
+        org.springframework: WARN
+
+    notification:
+      dispatcher:
+        enabled: ${DISPATCHER_ENABLED:false}
+        batch-size: 100
+        poll-interval: 5000
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: notification-secrets
+  namespace: notification-system
+type: Opaque
+data:
+  db-username: bm90aWZpY2F0aW9u  # base64 encoded "notification"
+  db-password: cGFzc3dvcmQ=      # base64 encoded "password"
+  fcm-credentials: e30=           # base64 encoded FCM service account JSON
+  apns-key: ZHVtbXk=              # base64 encoded APNs key
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-api
+  namespace: notification-system
+  labels:
+    app: notification-api
+    component: api
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: notification-api
+      component: api
+  template:
+    metadata:
+      labels:
+        app: notification-api
+        component: api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      serviceAccountName: notification-service-account
+      containers:
+      - name: notification-api
+        image: notification-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: actuator
+          containerPort: 8081
+          protocol: TCP
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "production"
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: notification-secrets
+              key: db-username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: notification-secrets
+              key: db-password
+        - name: DISPATCHER_ENABLED
+          value: "false"  # API pods don't run dispatcher
+        - name: JAVA_OPTS
+          value: >-
+            -Xms512m
+            -Xmx1024m
+            -XX:+UseG1GC
+            -XX:MaxGCPauseMillis=200
+            -XX:+HeapDumpOnOutOfMemoryError
+            -XX:HeapDumpPath=/tmp/heapdump.hprof
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health/live
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health/ready
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: config
+          mountPath: /config
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: config
+        configMap:
+          name: notification-config
+      - name: tmp
+        emptyDir: {}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-dispatcher
+  namespace: notification-system
+  labels:
+    app: notification-dispatcher
+    component: dispatcher
+spec:
+  replicas: 2  # Multiple dispatchers for high availability
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: notification-dispatcher
+      component: dispatcher
+  template:
+    metadata:
+      labels:
+        app: notification-dispatcher
+        component: dispatcher
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: notification-service-account
+      containers:
+      - name: notification-dispatcher
+        image: notification-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: actuator
+          containerPort: 8081
+          protocol: TCP
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "production"
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: notification-secrets
+              key: db-username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: notification-secrets
+              key: db-password
+        - name: DISPATCHER_ENABLED
+          value: "true"  # Dispatcher pods run outbox polling
+        - name: JAVA_OPTS
+          value: >-
+            -Xms512m
+            -Xmx1024m
+            -XX:+UseG1GC
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 1500m
+            memory: 1.5Gi
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health/live
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health/ready
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 5
+        volumeMounts:
+        - name: config
+          mountPath: /config
+          readOnly: true
+        - name: credentials
+          mountPath: /credentials
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: notification-config
+      - name: credentials
+        secret:
+          secretName: notification-secrets
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-api-service
+  namespace: notification-system
+  labels:
+    app: notification-api
+spec:
+  type: ClusterIP
+  selector:
+    app: notification-api
+    component: api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  - name: actuator
+    port: 8081
+    targetPort: 8081
+    protocol: TCP
+  sessionAffinity: ClientIP  # For WebSocket connections
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: notification-service-account
+  namespace: notification-system
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: notification-api-hpa
+  namespace: notification-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: notification-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: notification-api-pdb
+  namespace: notification-system
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: notification-api
+      component: api
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: notification-dispatcher-pdb
+  namespace: notification-system
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: notification-dispatcher
+      component: dispatcher

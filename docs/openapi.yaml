@@ -1,0 +1,522 @@
+openapi: 3.0.3
+info:
+  title: Notification Service API
+  description: |
+    Production-ready Notification System supporting Email, SMS, Push, and In-App notifications.
+
+    Features:
+    - Multi-channel notification delivery
+    - Transactional outbox pattern for reliability
+    - Retry with exponential backoff
+    - Idempotency support
+    - Device management for push notifications
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://api.example.com
+    description: Production
+
+tags:
+  - name: Notifications
+    description: Notification management endpoints
+  - name: Devices
+    description: Device push token management
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  /api/v1/notifications:
+    post:
+      tags:
+        - Notifications
+      summary: Create a new notification
+      description: Creates a notification with specified delivery channels. Supports idempotency via idempotency key.
+      operationId: createNotification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNotificationRequest'
+            examples:
+              emailNotification:
+                summary: Email notification
+                value:
+                  type: TRANSACTIONAL
+                  priority: HIGH
+                  recipientEmail: user@example.com
+                  subject: Welcome to our platform
+                  body: Thank you for signing up!
+                  channels:
+                    - EMAIL
+                  idempotencyKey: welcome-user-123
+              multiChannelNotification:
+                summary: Multi-channel notification
+                value:
+                  type: ALERT
+                  priority: URGENT
+                  userId: user-123
+                  recipientEmail: user@example.com
+                  recipientPhone: "+1234567890"
+                  subject: Critical Alert
+                  body: Your account requires immediate attention
+                  channels:
+                    - EMAIL
+                    - SMS
+                    - PUSH
+                    - IN_APP
+                  metadata:
+                    alertType: security
+                    severity: critical
+      responses:
+        '201':
+          description: Notification created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/notifications/{id}:
+    get:
+      tags:
+        - Notifications
+      summary: Get notification by ID
+      description: Retrieves a notification with its delivery status
+      operationId: getNotification
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Notification found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationResponse'
+        '404':
+          description: Notification not found
+
+  /api/v1/notifications/user/{userId}:
+    get:
+      tags:
+        - Notifications
+      summary: Get notifications for a user
+      description: Retrieves paginated notifications for a specific user
+      operationId: getUserNotifications
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Notifications retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NotificationResponse'
+                  totalElements:
+                    type: integer
+                  totalPages:
+                    type: integer
+                  number:
+                    type: integer
+                  size:
+                    type: integer
+
+  /api/v1/notifications/{id}/deliveries:
+    get:
+      tags:
+        - Notifications
+      summary: Get delivery status
+      description: Retrieves delivery status for all channels of a notification
+      operationId: getDeliveryStatus
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Delivery status retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeliveryResponse'
+
+  /api/v1/devices/push-token:
+    post:
+      tags:
+        - Devices
+      summary: Register device push token
+      description: Registers or updates a device push token for push notifications
+      operationId: registerDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDeviceRequest'
+            examples:
+              androidDevice:
+                summary: Android FCM token
+                value:
+                  userId: user-123
+                  deviceId: android-device-abc
+                  platform: FCM
+                  token: fcm-token-xyz-abc-123-very-long-token-string
+                  appVersion: 1.2.3
+                  osVersion: Android 13
+              iosDevice:
+                summary: iOS APNs token
+                value:
+                  userId: user-123
+                  deviceId: ios-device-def
+                  platform: APNS
+                  token: apns-token-xyz-def-456-very-long-token-string
+                  appVersion: 1.2.3
+                  osVersion: iOS 16.5
+      responses:
+        '201':
+          description: Device registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DevicePushToken'
+        '400':
+          description: Invalid request
+
+  /api/v1/devices/user/{userId}/tokens:
+    get:
+      tags:
+        - Devices
+      summary: Get active tokens for user
+      description: Retrieves all active push tokens for a user
+      operationId: getUserTokens
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tokens retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DevicePushToken'
+
+  /api/v1/health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Returns the health status of the service
+      operationId: health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: UP
+                  timestamp:
+                    type: string
+                    format: date-time
+                  service:
+                    type: string
+                    example: notification-service
+
+components:
+  schemas:
+    CreateNotificationRequest:
+      type: object
+      required:
+        - type
+        - body
+        - channels
+      properties:
+        type:
+          $ref: '#/components/schemas/NotificationType'
+        priority:
+          $ref: '#/components/schemas/NotificationPriority'
+        userId:
+          type: string
+          description: User ID (required for PUSH/IN_APP channels)
+        recipientEmail:
+          type: string
+          format: email
+          description: Email address (required for EMAIL channel)
+        recipientPhone:
+          type: string
+          description: Phone number in E.164 format (required for SMS channel)
+          pattern: '^\+[1-9]\d{1,14}$'
+          example: "+1234567890"
+        subject:
+          type: string
+          maxLength: 500
+          description: Notification subject/title
+        body:
+          type: string
+          description: Notification body/message
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional metadata for templating or custom data
+        channels:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryChannel'
+          minItems: 1
+          description: Delivery channels to use
+        scheduleAt:
+          type: string
+          format: date-time
+          description: Scheduled delivery time (defaults to now)
+        expiresAt:
+          type: string
+          format: date-time
+          description: Expiration time for time-sensitive notifications
+        idempotencyKey:
+          type: string
+          maxLength: 255
+          description: Client-provided key for idempotent requests
+        createdBy:
+          type: string
+          description: User/service creating the notification
+
+    NotificationResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/NotificationType'
+        priority:
+          $ref: '#/components/schemas/NotificationPriority'
+        userId:
+          type: string
+        recipientEmail:
+          type: string
+        recipientPhone:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        scheduleAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        idempotencyKey:
+          type: string
+        deliveries:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryResponse'
+
+    DeliveryResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        channel:
+          $ref: '#/components/schemas/DeliveryChannel'
+        status:
+          $ref: '#/components/schemas/DeliveryStatus'
+        recipient:
+          type: string
+        providerId:
+          type: string
+          description: External provider message ID
+        providerName:
+          type: string
+        attemptCount:
+          type: integer
+        maxAttempts:
+          type: integer
+        nextAttemptAt:
+          type: string
+          format: date-time
+        lastError:
+          type: string
+        sentAt:
+          type: string
+          format: date-time
+        deliveredAt:
+          type: string
+          format: date-time
+        failedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    RegisterDeviceRequest:
+      type: object
+      required:
+        - userId
+        - deviceId
+        - platform
+        - token
+      properties:
+        userId:
+          type: string
+        deviceId:
+          type: string
+        platform:
+          $ref: '#/components/schemas/PushPlatform'
+        token:
+          type: string
+          description: FCM or APNs registration token
+        appVersion:
+          type: string
+        osVersion:
+          type: string
+
+    DevicePushToken:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+        deviceId:
+          type: string
+        platform:
+          $ref: '#/components/schemas/PushPlatform'
+        token:
+          type: string
+        appVersion:
+          type: string
+        osVersion:
+          type: string
+        active:
+          type: boolean
+        lastUsedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    NotificationType:
+      type: string
+      enum:
+        - TRANSACTIONAL
+        - PROMOTIONAL
+        - SYSTEM
+        - ALERT
+
+    NotificationPriority:
+      type: string
+      enum:
+        - LOW
+        - NORMAL
+        - HIGH
+        - URGENT
+
+    DeliveryChannel:
+      type: string
+      enum:
+        - EMAIL
+        - SMS
+        - PUSH
+        - IN_APP
+
+    DeliveryStatus:
+      type: string
+      enum:
+        - PENDING
+        - PROCESSING
+        - SENT
+        - DELIVERED
+        - FAILED
+        - PERMANENT_FAILURE
+        - SKIPPED
+
+    PushPlatform:
+      type: string
+      enum:
+        - FCM
+        - APNS
+
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+        error:
+          type: string
+        message:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: string

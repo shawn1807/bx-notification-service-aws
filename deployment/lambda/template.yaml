@@ -1,0 +1,286 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Notification Service - Serverless Deployment
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment stage
+
+  DBUrl:
+    Type: String
+    Description: Database connection URL
+    Default: jdbc:postgresql://db-instance.region.rds.amazonaws.com:5432/notifications
+
+  DBUsername:
+    Type: String
+    Description: Database username
+    Default: notification
+
+  DBPassword:
+    Type: String
+    Description: Database password
+    NoEcho: true
+
+  EmailProvider:
+    Type: String
+    Default: AWS_SES
+    AllowedValues:
+      - MOCK
+      - AWS_SES
+    Description: Email provider
+
+  SmsProvider:
+    Type: String
+    Default: AWS_SNS
+    AllowedValues:
+      - MOCK
+      - AWS_SNS
+    Description: SMS provider
+
+  PushProvider:
+    Type: String
+    Default: AWS_SNS
+    AllowedValues:
+      - DIRECT
+      - AWS_SNS
+    Description: Push notification provider
+
+Globals:
+  Function:
+    Runtime: java21
+    Timeout: 300
+    MemorySize: 1024
+    Environment:
+      Variables:
+        DB_URL: !Ref DBUrl
+        DB_USERNAME: !Ref DBUsername
+        DB_PASSWORD: !Ref DBPassword
+        AWS_REGION: !Ref AWS::Region
+        EMAIL_PROVIDER: !Ref EmailProvider
+        SMS_PROVIDER: !Ref SmsProvider
+        PUSH_PROVIDER: !Ref PushProvider
+        NOTIFICATION_EVENTS_QUEUE_URL: !Ref NotificationEventsQueue
+
+Resources:
+  # SQS Queue for notification events
+  NotificationEventsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub notification-events-${Stage}
+      VisibilityTimeout: 360  # 6 minutes (longer than Lambda timeout)
+      MessageRetentionPeriod: 1209600  # 14 days
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt NotificationEventsDLQ.Arn
+        maxReceiveCount: 3
+
+  # Dead Letter Queue
+  NotificationEventsDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub notification-events-dlq-${Stage}
+      MessageRetentionPeriod: 1209600  # 14 days
+
+  # API Lambda Function
+  NotificationApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub notification-api-${Stage}
+      Handler: com.tsu.notification.lambda.ApiGatewayLambdaHandler::handleRequest
+      CodeUri: ../../target/bx-notification-1.0-aws-lambda.jar
+      Description: Notification API - Create and query notifications
+      Timeout: 30
+      MemorySize: 512
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - AWSLambdaVPCAccessExecutionRole
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendTemplatedEmail
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource: !GetAtt NotificationEventsQueue.Arn
+      Events:
+        CreateNotification:
+          Type: Api
+          Properties:
+            Path: /api/v1/notifications
+            Method: POST
+        GetNotification:
+          Type: Api
+          Properties:
+            Path: /api/v1/notifications/{id}
+            Method: GET
+      Tags:
+        Stage: !Ref Stage
+        Component: API
+
+  # Queue Consumer Lambda Function
+  QueueConsumerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub notification-queue-consumer-${Stage}
+      Handler: com.tsu.notification.lambda.SqsQueueConsumerLambdaHandler::handleRequest
+      CodeUri: ../../target/bx-notification-1.0-aws-lambda.jar
+      Description: Notification Queue Consumer - Process events from SQS
+      Timeout: 300
+      MemorySize: 1024
+      ReservedConcurrentExecutions: 10  # Limit concurrent executions
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - AWSLambdaVPCAccessExecutionRole
+        - SQSPollerPolicy:
+            QueueName: !GetAtt NotificationEventsQueue.QueueName
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendTemplatedEmail
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - sns:Publish
+                - sns:CreatePlatformEndpoint
+              Resource: '*'
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt NotificationEventsQueue.Arn
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 5
+      Tags:
+        Stage: !Ref Stage
+        Component: QueueConsumer
+
+  # Outbox Dispatcher Lambda Function
+  OutboxDispatcherFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub notification-outbox-dispatcher-${Stage}
+      Handler: com.tsu.notification.lambda.OutboxDispatcherLambdaHandler::handleRequest
+      CodeUri: ../../target/bx-notification-1.0-aws-lambda.jar
+      Description: Notification Outbox Dispatcher - Poll DB and publish to queue
+      Timeout: 300
+      MemorySize: 1024
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - AWSLambdaVPCAccessExecutionRole
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource: !GetAtt NotificationEventsQueue.Arn
+      Events:
+        ScheduledEvent:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 minute)
+            Description: Poll outbox table every minute
+            Enabled: true
+      Tags:
+        Stage: !Ref Stage
+        Component: OutboxDispatcher
+
+  # CloudWatch Log Groups
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/notification-api-${Stage}
+      RetentionInDays: 30
+
+  QueueConsumerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/notification-queue-consumer-${Stage}
+      RetentionInDays: 30
+
+  OutboxDispatcherLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/notification-outbox-dispatcher-${Stage}
+      RetentionInDays: 30
+
+  # CloudWatch Alarms
+  QueueDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub notification-queue-depth-${Stage}
+      AlarmDescription: Alert when queue depth exceeds threshold
+      MetricName: ApproximateNumberOfMessagesVisible
+      Namespace: AWS/SQS
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1000
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt NotificationEventsQueue.QueueName
+
+  DLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub notification-dlq-messages-${Stage}
+      AlarmDescription: Alert when messages appear in DLQ
+      MetricName: ApproximateNumberOfMessagesVisible
+      Namespace: AWS/SQS
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt NotificationEventsDLQ.QueueName
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/
+
+  NotificationEventsQueueUrl:
+    Description: SQS Queue URL for notification events
+    Value: !Ref NotificationEventsQueue
+    Export:
+      Name: !Sub ${AWS::StackName}-QueueUrl
+
+  NotificationEventsDLQUrl:
+    Description: SQS Dead Letter Queue URL
+    Value: !Ref NotificationEventsDLQ
+    Export:
+      Name: !Sub ${AWS::StackName}-DLQUrl
+
+  ApiLambdaArn:
+    Description: API Lambda Function ARN
+    Value: !GetAtt NotificationApiFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-ApiLambdaArn
+
+  QueueConsumerLambdaArn:
+    Description: Queue Consumer Lambda Function ARN
+    Value: !GetAtt QueueConsumerFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-QueueConsumerArn
+
+  OutboxDispatcherLambdaArn:
+    Description: Outbox Dispatcher Lambda Function ARN
+    Value: !GetAtt OutboxDispatcherFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-OutboxDispatcherArn

@@ -1,0 +1,1 @@
+${i18n("otp.email.subject", appName)}

@@ -1,0 +1,15 @@
+# SAM build artifacts
+.aws-sam/
+samconfig.toml.bak
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Node
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.iml

@@ -1,0 +1,298 @@
+spring:
+  application:
+    name: notification-service
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/notifications}
+    username: ${DB_USERNAME:notification}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+
+    hikari:
+      pool-name: NotificationHikariPool
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      auto-commit: true
+      connection-test-query: SELECT 1
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        jdbc:
+          batch_size: 20
+          fetch_size: 50
+        order_inserts: true
+        order_updates: true
+        generate_statistics: false
+    show-sql: false
+    open-in-view: false
+
+  # Task scheduling
+  task:
+    scheduling:
+      pool:
+        size: 5
+    execution:
+      pool:
+        core-size: 10
+        max-size: 20
+        queue-capacity: 100
+
+  # WebSocket configuration
+  websocket:
+    allowed-origins: "*"
+    message-size-limit: 128KB
+    send-buffer-size-limit: 512KB
+
+server:
+  port: ${PORT:8080}
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 10
+    connection-timeout: 20000
+    max-connections: 10000
+    accept-count: 100
+
+# Management endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+      environment: ${ENVIRONMENT:development}
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.bx.notification: INFO
+    org.springframework: WARN
+    org.hibernate: WARN
+    org.hibernate.SQL: ${SQL_LOGGING:WARN}
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: ${LOG_FILE:logs/notification-service.log}
+    max-size: 10MB
+    max-history: 30
+    total-size-cap: 1GB
+
+# Application-specific configuration
+notification:
+  # Dispatcher configuration
+  dispatcher:
+    enabled: ${DISPATCHER_ENABLED:true}
+    batch-size: ${DISPATCHER_BATCH_SIZE:100}
+    poll-interval: ${DISPATCHER_POLL_INTERVAL:5000}
+    pool-size: ${DISPATCHER_POOL_SIZE:10}
+    max-retries: 5
+    base-delay-seconds: 60
+
+# AWS Configuration
+aws:
+  region: ${AWS_REGION:us-east-1}
+  sqs:
+    endpoint: ${AWS_SQS_ENDPOINT:#{null}}
+  ses:
+    endpoint: ${AWS_SES_ENDPOINT:#{null}}  # For LocalStack
+  sns:
+    endpoint: ${AWS_SNS_ENDPOINT:#{null}}  # For LocalStack
+
+# Queue Configuration
+queue:
+  provider: ${QUEUE_PROVIDER:sqs}
+  consumer:
+    enabled: ${QUEUE_CONSUMER_ENABLED:true}
+  notification-events:
+    queue-url: ${NOTIFICATION_EVENTS_QUEUE_URL:https://sqs.us-east-1.amazonaws.com/123456789012/notification-events}
+    max-messages: ${QUEUE_MAX_MESSAGES:10}
+    wait-time-seconds: ${QUEUE_WAIT_TIME:20}
+    visibility-timeout: ${QUEUE_VISIBILITY_TIMEOUT:30}
+
+  # Channel-specific configuration
+  channels:
+    email:
+      enabled: ${EMAIL_ENABLED:true}
+      provider: ${EMAIL_PROVIDER:MOCK}  # Options: MOCK, AWS_SES
+      from-address: ${EMAIL_FROM:noreply@example.com}
+      from-name: ${EMAIL_FROM_NAME:Notification Service}
+      configuration-set: ${EMAIL_CONFIG_SET:#{null}}  # AWS SES configuration set for tracking
+
+    sms:
+      enabled: ${SMS_ENABLED:true}
+      provider: ${SMS_PROVIDER:MOCK}  # Options: MOCK, AWS_SNS
+      sender-id: ${SMS_SENDER_ID:#{null}}  # Custom sender ID (not supported in all countries)
+      sms-type: ${SMS_TYPE:Transactional}  # Transactional or Promotional
+      max-price: ${SMS_MAX_PRICE:1.00}  # Max price per SMS (USD)
+
+    push:
+      enabled: ${PUSH_ENABLED:true}
+      provider: ${PUSH_PROVIDER:DIRECT}  # Options: DIRECT (FCM/APNs), AWS_SNS
+      # Direct FCM/APNs configuration
+      fcm:
+        enabled: ${FCM_ENABLED:true}
+        credentials-path: ${FCM_CREDENTIALS_PATH:classpath:fcm-credentials.json}
+        platform-application-arn: ${FCM_PLATFORM_ARN:#{null}}  # For AWS SNS
+      apns:
+        enabled: ${APNS_ENABLED:true}
+        key-path: ${APNS_KEY_PATH:classpath:apns-key.p8}
+        team-id: ${APNS_TEAM_ID:}
+        key-id: ${APNS_KEY_ID:}
+        production: ${APNS_PRODUCTION:false}
+        platform-application-arn: ${APNS_PLATFORM_ARN:#{null}}  # For AWS SNS
+
+    in-app:
+      enabled: ${IN_APP_ENABLED:true}
+      websocket-enabled: ${WEBSOCKET_ENABLED:true}
+      sse-enabled: ${SSE_ENABLED:true}
+
+  # Rate limiting
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:false}
+    requests-per-second: ${RATE_LIMIT_RPS:100}
+    burst: ${RATE_LIMIT_BURST:200}
+
+  # Audit logging
+  audit:
+    enabled: ${AUDIT_ENABLED:true}
+    async: true
+
+# Actuator info endpoint
+info:
+  app:
+    name: ${spring.application.name}
+    description: Production-ready notification service
+    version: 1.0.0
+    encoding: ${project.build.sourceEncoding:UTF-8}
+    java:
+      version: ${java.version}
+
+# Spring Doc (OpenAPI)
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+  show-actuator: false
+
+---
+# Development profile
+spring:
+  config:
+    activate:
+      on-profile: development
+
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        generate_statistics: true
+
+logging:
+  level:
+    com.bx.notification: DEBUG
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+notification:
+  channels:
+    email:
+      provider: MOCK
+    sms:
+      provider: MOCK
+    push:
+      fcm:
+        enabled: false
+      apns:
+        enabled: false
+
+# Local development - use LocalStack
+aws:
+  sqs:
+    endpoint: http://localhost:4566
+  ses:
+    endpoint: http://localhost:4566
+  sns:
+    endpoint: http://localhost:4566
+
+queue:
+  notification-events:
+    queue-url: http://localhost:4566/000000000000/notification-events
+
+notification:
+  channels:
+    email:
+      provider: MOCK  # Use MOCK for local dev, AWS_SES for production
+    sms:
+      provider: MOCK  # Use MOCK for local dev, AWS_SNS for production
+    push:
+      provider: DIRECT  # Use DIRECT for FCM/APNs, AWS_SNS for unified AWS approach
+
+---
+# Production profile
+spring:
+  config:
+    activate:
+      on-profile: production
+
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        generate_statistics: false
+
+logging:
+  level:
+    com.tsu.notification: INFO
+    org.springframework: WARN
+
+notification:
+  audit:
+    enabled: true
+    async: true
+  channels:
+    email:
+      provider: AWS_SES  # Use AWS SES in production
+      configuration-set: notification-tracking  # For open/click tracking
+    sms:
+      provider: AWS_SNS  # Use AWS SNS in production
+      sms-type: Transactional
+      max-price: 0.50  # Set conservative limit
+    push:
+      provider: AWS_SNS  # Optional: use AWS_SNS for unified AWS approach
