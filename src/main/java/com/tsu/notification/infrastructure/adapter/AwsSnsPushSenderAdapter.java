@@ -3,6 +3,7 @@ package com.tsu.notification.infrastructure.adapter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tsu.notification.entities.DevicePushToken;
 import com.tsu.enums.PushPlatform;
+import com.tsu.notification.val.DevicePushTokenVal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -53,7 +54,7 @@ public class AwsSnsPushSenderAdapter {
      * Note: Device must be registered as SNS endpoint first
      */
     public SendResult sendPush(
-        DevicePushToken deviceToken,
+        DevicePushTokenVal deviceToken,
         String title,
         String body,
         Map<String, Object> metadata
