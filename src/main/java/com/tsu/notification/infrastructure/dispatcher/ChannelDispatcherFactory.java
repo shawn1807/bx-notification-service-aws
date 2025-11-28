@@ -1,5 +1,6 @@
 package com.tsu.notification.infrastructure.dispatcher;
 
+import com.tsu.enums.MessageChannel;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -16,9 +17,9 @@ import java.util.stream.Collectors;
 public class ChannelDispatcherFactory {
 
     private final List<ChannelDispatcher> dispatchers;
-    private Map<DeliveryChannel, ChannelDispatcher> dispatcherMap;
+    private Map<MessageChannel, ChannelDispatcher> dispatcherMap;
 
-    public ChannelDispatcher getDispatcher(DeliveryChannel channel) {
+    public ChannelDispatcher getDispatcher(MessageChannel channel) {
         if (dispatcherMap == null) {
             initializeDispatcherMap();
         }
