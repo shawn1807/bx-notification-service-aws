@@ -51,7 +51,7 @@ public class PushChannelDispatcher implements ChannelDispatcher {
 
             // Get user's active device tokens
             String userId = delivery.getRecipient();
-            List<DevicePushToken> tokens = deviceRepository.findByUserIdAndActiveAndDeletedAtIsNull(userId, true);
+            List<DevicePushToken> tokens = deviceRepository.findByUserIdAndActiveAndRevokedDateIsNull(userId, true);
 
             if (tokens.isEmpty()) {
                 log.warn("No active push tokens found for user: userId={}", userId);
