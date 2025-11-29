@@ -3,6 +3,7 @@ package com.tsu.notification.infrastructure.dispatcher;
 import com.tsu.notification.enums.DeliveryStatus;
 import com.tsu.notification.infrastructure.adapter.SendResult;
 import com.tsu.notification.infrastructure.adapter.SmsSenderAdapter;
+import com.tsu.notification.infrastructure.queue.OutboxEventMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -20,7 +21,7 @@ public class SmsChannelDispatcher implements ChannelDispatcher {
 
     @Override
     @Transactional
-    public void dispatch(NotificationChannelDelivery delivery) {
+    public void dispatch(OutboxEventMessage delivery) {
         if (!supports(delivery)) {
             log.warn("Delivery not supported by SmsChannelDispatcher: {}", delivery.getChannel());
             return;
@@ -29,7 +30,7 @@ public class SmsChannelDispatcher implements ChannelDispatcher {
         // Idempotency check
         if (delivery.getProviderId() != null && delivery.getStatus() == DeliveryStatus.SENT) {
             log.info("SMS already sent, skipping: deliveryId={}, providerId={}",
-                delivery.getId(), delivery.getProviderId());
+                    delivery.getId(), delivery.getProviderId());
             return;
         }
 
@@ -38,13 +39,13 @@ public class SmsChannelDispatcher implements ChannelDispatcher {
             deliveryRepository.save(delivery);
 
             Notification notification = notificationRepository.findById(delivery.getNotificationId())
-                .orElseThrow(() -> new IllegalStateException("Notification not found: " + delivery.getNotificationId()));
+                    .orElseThrow(() -> new IllegalStateException("Notification not found: " + delivery.getNotificationId()));
 
             log.info("Sending SMS: deliveryId={}, recipient={}", delivery.getId(), delivery.getRecipient());
             SendResult result = smsSenderAdapter.sendSms(
-                delivery.getRecipient(),
-                notification.getBody(),
-                notification.getMetadata()
+                    delivery.getRecipient(),
+                    notification.getBody(),
+                    notification.getMetadata()
             );
 
             if (result.isSuccess()) {
@@ -53,7 +54,7 @@ public class SmsChannelDispatcher implements ChannelDispatcher {
                 auditService.logDeliverySent(delivery, "SYSTEM");
 
                 log.info("SMS sent successfully: deliveryId={}, providerId={}",
-                    delivery.getId(), result.getProviderId());
+                        delivery.getId(), result.getProviderId());
             } else {
                 handleFailure(delivery, result.getErrorMessage(), result.getErrorCode());
             }
@@ -71,11 +72,11 @@ public class SmsChannelDispatcher implements ChannelDispatcher {
 
         if (delivery.getStatus() == DeliveryStatus.PERMANENT_FAILURE) {
             log.error("SMS permanently failed after {} attempts: deliveryId={}",
-                delivery.getAttemptCount(), delivery.getId());
+                    delivery.getAttemptCount(), delivery.getId());
         } else {
             log.warn("SMS failed, will retry at {}: deliveryId={}, attempt={}/{}",
-                delivery.getNextAttemptAt(), delivery.getId(),
-                delivery.getAttemptCount(), delivery.getMaxAttempts());
+                    delivery.getNextAttemptAt(), delivery.getId(),
+                    delivery.getAttemptCount(), delivery.getMaxAttempts());
         }
     }
 

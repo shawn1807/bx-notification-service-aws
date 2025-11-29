@@ -2,6 +2,7 @@ package com.tsu.notification.infrastructure.dispatcher;
 
 import com.tsu.notification.entities.DevicePushToken;
 import com.tsu.notification.enums.DeliveryStatus;
+import com.tsu.notification.infrastructure.queue.OutboxEventMessage;
 import com.tsu.notification.repo.DevicePushTokenRepository;
 import com.tsu.notification.repo.NotificationRepository;
 import com.tsu.notification.infrastructure.adapter.PushSenderAdapter;
@@ -29,7 +30,7 @@ public class PushChannelDispatcher implements ChannelDispatcher {
 
     @Override
     @Transactional
-    public void dispatch(NotificationChannelDelivery delivery) {
+    public void dispatch(OutboxEventMessage delivery) {
         if (!supports(delivery)) {
             log.warn("Delivery not supported by PushChannelDispatcher: {}", delivery.getChannel());
             return;

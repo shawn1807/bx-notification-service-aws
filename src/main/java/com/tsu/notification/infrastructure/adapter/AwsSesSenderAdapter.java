@@ -12,7 +12,7 @@ import java.util.Map;
 
 /**
  * AWS SES implementation for sending emails
- *
+ * <p>
  * Features:
  * - Send simple emails (HTML/Plain text)
  * - Send templated emails
@@ -37,34 +37,35 @@ public class AwsSesSenderAdapter implements EmailSenderAdapter {
     private String configurationSet;
 
     @Override
-    public SendResult sendEmail(String recipient, String subject, String body, Map<String, Object> metadata) {
-        log.info("Sending email via AWS SES to: {}, subject: {}", recipient, subject);
+    public SendResult sendEmail(String to, String cc, String subject, String body, Map<String, Object> metadata) {
+        log.info("Sending email via AWS SES to: {} cc: {}, subject: {}", to, cc, subject);
 
         try {
             // Build message
             Message message = Message.builder()
-                .subject(Content.builder()
-                    .data(subject)
-                    .charset("UTF-8")
-                    .build())
-                .body(Body.builder()
-                    .html(Content.builder()
-                        .data(body)
-                        .charset("UTF-8")
-                        .build())
-                    .build())
-                .build();
+                    .subject(Content.builder()
+                            .data(subject)
+                            .charset("UTF-8")
+                            .build())
+                    .body(Body.builder()
+                            .html(Content.builder()
+                                    .data(body)
+                                    .charset("UTF-8")
+                                    .build())
+                            .build())
+                    .build();
 
             // Build destination
             Destination destination = Destination.builder()
-                .toAddresses(recipient)
-                .build();
+                    .toAddresses(to)
+                    .ccAddresses(cc)
+                    .build();
 
             // Build request
             var requestBuilder = SendEmailRequest.builder()
-                .source(formatFromAddress())
-                .destination(destination)
-                .message(message);
+                    .source(formatFromAddress())
+                    .destination(destination)
+                    .message(message);
 
             // Add configuration set if configured (for tracking opens/clicks)
             if (configurationSet != null && !configurationSet.isBlank()) {
@@ -80,38 +81,38 @@ public class AwsSesSenderAdapter implements EmailSenderAdapter {
             SendEmailResponse response = sesClient.sendEmail(requestBuilder.build());
             String messageId = response.messageId();
 
-            log.info("Email sent successfully via AWS SES: messageId={}, recipient={}",
-                messageId, recipient);
+            log.info("Email sent successfully via AWS SES: messageId={}, to={}, cc={}",
+                    messageId, to, cc);
 
             return SendResult.success(messageId, "AWS_SES");
 
         } catch (MessageRejectedException e) {
-            log.error("AWS SES rejected email: recipient={}, reason={}",
-                recipient, e.awsErrorDetails().errorMessage());
+            log.error("AWS SES rejected email: to={}, cc={}, reason={}",
+                    to, cc, e.awsErrorDetails().errorMessage());
             return SendResult.failure(
-                "Email rejected: " + e.awsErrorDetails().errorMessage(),
-                "SES_REJECTED"
+                    "Email rejected: " + e.awsErrorDetails().errorMessage(),
+                    "SES_REJECTED"
             );
 
         } catch (MailFromDomainNotVerifiedException e) {
             log.error("AWS SES domain not verified: {}", fromAddress);
             return SendResult.failure(
-                "Domain not verified in SES",
-                "SES_DOMAIN_NOT_VERIFIED"
+                    "Domain not verified in SES",
+                    "SES_DOMAIN_NOT_VERIFIED"
             );
 
         } catch (AccountSendingPausedException e) {
             log.error("AWS SES account sending paused");
             return SendResult.failure(
-                "SES account sending is paused",
-                "SES_ACCOUNT_PAUSED"
+                    "SES account sending is paused",
+                    "SES_ACCOUNT_PAUSED"
             );
 
         } catch (SesException e) {
             log.error("AWS SES error: {}", e.awsErrorDetails().errorMessage(), e);
             return SendResult.failure(
-                "SES error: " + e.awsErrorDetails().errorMessage(),
-                "SES_ERROR"
+                    "SES error: " + e.awsErrorDetails().errorMessage(),
+                    "SES_ERROR"
             );
 
         } catch (Exception e) {
@@ -122,12 +123,12 @@ public class AwsSesSenderAdapter implements EmailSenderAdapter {
 
     @Override
     public SendResult sendTemplatedEmail(
-        String recipient,
-        String templateId,
-        Map<String, Object> templateData
+            String recipient,
+            String templateId,
+            Map<String, Object> templateData
     ) {
         log.info("Sending templated email via AWS SES: recipient={}, template={}",
-            recipient, templateId);
+                recipient, templateId);
 
         try {
             // Build template data JSON
@@ -135,12 +136,12 @@ public class AwsSesSenderAdapter implements EmailSenderAdapter {
 
             // Build request
             var requestBuilder = SendTemplatedEmailRequest.builder()
-                .source(formatFromAddress())
-                .destination(Destination.builder()
-                    .toAddresses(recipient)
-                    .build())
-                .template(templateId)
-                .templateData(templateDataJson);
+                    .source(formatFromAddress())
+                    .destination(Destination.builder()
+                            .toAddresses(recipient)
+                            .build())
+                    .template(templateId)
+                    .templateData(templateDataJson);
 
             // Add configuration set if configured
             if (configurationSet != null && !configurationSet.isBlank()) {
@@ -149,27 +150,27 @@ public class AwsSesSenderAdapter implements EmailSenderAdapter {
 
             // Send templated email
             SendTemplatedEmailResponse response = sesClient.sendTemplatedEmail(
-                requestBuilder.build()
+                    requestBuilder.build()
             );
             String messageId = response.messageId();
 
             log.info("Templated email sent successfully via AWS SES: messageId={}, template={}",
-                messageId, templateId);
+                    messageId, templateId);
 
             return SendResult.success(messageId, "AWS_SES_TEMPLATE");
 
         } catch (TemplateDoesNotExistException e) {
             log.error("AWS SES template does not exist: {}", templateId);
             return SendResult.failure(
-                "Template not found: " + templateId,
-                "SES_TEMPLATE_NOT_FOUND"
+                    "Template not found: " + templateId,
+                    "SES_TEMPLATE_NOT_FOUND"
             );
 
         } catch (SesException e) {
             log.error("AWS SES error: {}", e.awsErrorDetails().errorMessage(), e);
             return SendResult.failure(
-                "SES error: " + e.awsErrorDetails().errorMessage(),
-                "SES_ERROR"
+                    "SES error: " + e.awsErrorDetails().errorMessage(),
+                    "SES_ERROR"
             );
 
         } catch (Exception e) {
@@ -225,10 +226,10 @@ public class AwsSesSenderAdapter implements EmailSenderAdapter {
     private String escapeJson(String input) {
         if (input == null) return "";
         return input.replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t");
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
     }
 
     /**
@@ -238,7 +239,7 @@ public class AwsSesSenderAdapter implements EmailSenderAdapter {
         try {
             GetSendQuotaResponse response = sesClient.getSendQuota();
             log.debug("SES send quota: max24HourSend={}, sentLast24Hours={}",
-                response.max24HourSend(), response.sentLast24Hours());
+                    response.max24HourSend(), response.sentLast24Hours());
             return true;
         } catch (Exception e) {
             log.error("SES health check failed", e);

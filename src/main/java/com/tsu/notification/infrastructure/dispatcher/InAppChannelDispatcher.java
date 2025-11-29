@@ -1,6 +1,7 @@
 package com.tsu.notification.infrastructure.dispatcher;
 
 import com.tsu.notification.enums.DeliveryStatus;
+import com.tsu.notification.infrastructure.queue.OutboxEventMessage;
 import com.tsu.notification.repo.NotificationRepository;
 import com.tsu.notification.infrastructure.adapter.InAppSenderAdapter;
 import com.tsu.notification.infrastructure.adapter.SendResult;
@@ -24,7 +25,7 @@ public class InAppChannelDispatcher implements ChannelDispatcher {
 
     @Override
     @Transactional
-    public void dispatch(NotificationChannelDelivery delivery) {
+    public void dispatch(OutboxEventMessage delivery) {
         if (!supports(delivery)) {
             log.warn("Delivery not supported by InAppChannelDispatcher: {}", delivery.getChannel());
             return;

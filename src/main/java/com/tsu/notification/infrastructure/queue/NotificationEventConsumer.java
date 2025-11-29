@@ -1,8 +1,7 @@
 package com.tsu.notification.infrastructure.queue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tsu.notification.entities.OutboxEvent;
-import com.tsu.notification.infrastructure.dispatcher.NotificationEventHandler;
+import com.tsu.notification.infrastructure.dispatcher.OutboxEventMessageHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,11 +15,11 @@ import java.util.List;
 
 /**
  * Consumer that polls notification events from SQS queue and processes them
- *
+ * <p>
  * Separation of concerns:
  * - OutboxDispatcher: Polls DB and publishes to queue (producer)
  * - NotificationEventConsumer: Consumes from queue and routes to handlers (consumer)
- *
+ * <p>
  * Benefits:
  * - Decouples outbox processing from event handling
  * - Can scale independently (more consumers if needed)
@@ -34,7 +33,7 @@ import java.util.List;
 public class NotificationEventConsumer {
 
     private final SqsClient sqsClient;
-    private final NotificationEventHandler notificationEventHandler;
+    private final OutboxEventMessageHandler outboxEventHandler;
     private final ObjectMapper objectMapper;
 
     @Value("${queue.notification-events.queue-url}")
@@ -80,19 +79,19 @@ public class NotificationEventConsumer {
     private List<Message> receiveMessages() {
         try {
             ReceiveMessageRequest request = ReceiveMessageRequest.builder()
-                .queueUrl(queueUrl)
-                .maxNumberOfMessages(maxMessages)
-                .waitTimeSeconds(waitTimeSeconds)
-                .visibilityTimeout(visibilityTimeout)
-                .messageAttributeNames("All")
-                .build();
+                    .queueUrl(queueUrl)
+                    .maxNumberOfMessages(maxMessages)
+                    .waitTimeSeconds(waitTimeSeconds)
+                    .visibilityTimeout(visibilityTimeout)
+                    .messageAttributeNames("All")
+                    .build();
 
             ReceiveMessageResponse response = sqsClient.receiveMessage(request);
             return response.messages();
 
         } catch (SqsException e) {
             log.error("Failed to receive messages from SQS: error={}",
-                e.awsErrorDetails().errorMessage(), e);
+                    e.awsErrorDetails().errorMessage(), e);
             return List.of();
         }
     }
@@ -106,26 +105,24 @@ public class NotificationEventConsumer {
 
             // Parse queue message
             QueueMessage<OutboxEventMessage> queueMessage = objectMapper.readValue(
-                message.body(),
-                objectMapper.getTypeFactory().constructParametricType(
-                    QueueMessage.class,
-                    OutboxEventMessage.class
-                )
+                    message.body(),
+                    objectMapper.getTypeFactory().constructParametricType(
+                            QueueMessage.class,
+                            OutboxEventMessage.class
+                    )
             );
 
             OutboxEventMessage eventMessage = queueMessage.getPayload();
 
-            // Convert to OutboxEvent for handler
-            OutboxEvent event = convertToOutboxEvent(eventMessage);
 
             // Route to handler
-            notificationEventHandler.handle(event);
+            outboxEventHandler.handle(eventMessage);
 
             // Delete message from queue on success
             deleteMessage(message.receiptHandle());
 
             log.info("Message processed successfully: messageId={}, eventType={}",
-                message.messageId(), eventMessage.getEventType());
+                    message.messageId(), eventMessage.getEventType());
 
         } catch (Exception e) {
             log.error("Failed to process message: messageId={}", message.messageId(), e);
@@ -135,19 +132,6 @@ public class NotificationEventConsumer {
         }
     }
 
-    /**
-     * Convert OutboxEventMessage to OutboxEvent
-     */
-    private OutboxEvent convertToOutboxEvent(OutboxEventMessage message) {
-        return OutboxEvent.builder()
-            .id(message.getEventId())
-            .aggregateType(message.getAggregateType())
-            .aggregateId(message.getAggregateId())
-            .eventType(message.getEventType())
-            .payload(message.getPayload())
-            .partitionKey(message.getPartitionKey())
-            .build();
-    }
 
     /**
      * Delete message from queue
@@ -155,15 +139,15 @@ public class NotificationEventConsumer {
     private void deleteMessage(String receiptHandle) {
         try {
             DeleteMessageRequest request = DeleteMessageRequest.builder()
-                .queueUrl(queueUrl)
-                .receiptHandle(receiptHandle)
-                .build();
+                    .queueUrl(queueUrl)
+                    .receiptHandle(receiptHandle)
+                    .build();
 
             sqsClient.deleteMessage(request);
 
         } catch (SqsException e) {
             log.error("Failed to delete message from SQS: error={}",
-                e.awsErrorDetails().errorMessage(), e);
+                    e.awsErrorDetails().errorMessage(), e);
         }
     }
 }

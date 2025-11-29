@@ -1,13 +1,13 @@
 package com.tsu.notification.infrastructure.dispatcher;
 
+import com.tsu.notification.infrastructure.queue.OutboxEventMessage;
+
 /**
  * Interface for channel-specific dispatchers
  */
 public interface ChannelDispatcher {
 
-    /**
-     * Dispatch a delivery to the appropriate provider
-     */
-    void dispatch(NotificationChannelDelivery delivery);
+ 
+    void dispatch(OutboxEventMessage delivery);
 
 }

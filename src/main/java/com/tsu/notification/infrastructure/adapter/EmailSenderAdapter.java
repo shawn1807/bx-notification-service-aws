@@ -11,13 +11,14 @@ public interface EmailSenderAdapter {
     /**
      * Send email via provider
      *
-     * @param recipient Email address
+     * @param to Email address
+     * @param cc Email address
      * @param subject   Email subject
      * @param body      Email body (HTML or plain text)
      * @param metadata  Additional metadata (template variables, reply-to, etc.)
      * @return SendResult with provider ID for idempotency
      */
-    SendResult sendEmail(String recipient, String subject, String body, Map<String, Object> metadata);
+    SendResult sendEmail(String to, String cc, String subject, String body, Map<String, Object> metadata);
 
     /**
      * Send templated email

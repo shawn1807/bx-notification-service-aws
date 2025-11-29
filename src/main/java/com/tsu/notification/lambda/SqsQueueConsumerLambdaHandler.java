@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tsu.notification.dto.OutboxEvent;
 import com.tsu.notification.dto.OutboxEventDto;
 import com.tsu.notification.entities.OutboxEvent;
-import com.tsu.notification.infrastructure.dispatcher.NotificationEventHandler;
+import com.tsu.notification.infrastructure.dispatcher.OutboxEventMessageHandler;
 import com.tsu.notification.infrastructure.queue.OutboxEventMessage;
 import com.tsu.notification.infrastructure.queue.QueueMessage;
 import com.tsu.notification.val.OutboxEventVal;
@@ -31,7 +31,7 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 public class SqsQueueConsumerLambdaHandler implements RequestHandler<SQSEvent, Void> {
 
     private static ApplicationContext applicationContext;
-    private static NotificationEventHandler eventHandler;
+    private static OutboxEventMessageHandler eventHandler;
     private static ObjectMapper objectMapper;
 
     static {
@@ -41,7 +41,7 @@ public class SqsQueueConsumerLambdaHandler implements RequestHandler<SQSEvent, V
             applicationContext = new AnnotationConfigApplicationContext(
                 LambdaConfiguration.class
             );
-            eventHandler = applicationContext.getBean(NotificationEventHandler.class);
+            eventHandler = applicationContext.getBean(OutboxEventMessageHandler.class);
             objectMapper = applicationContext.getBean(ObjectMapper.class);
             log.info("Spring Application Context initialized successfully");
         } catch (Exception e) {
