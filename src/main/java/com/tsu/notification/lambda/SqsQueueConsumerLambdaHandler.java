@@ -4,10 +4,13 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.SQSEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tsu.notification.dto.OutboxEvent;
+import com.tsu.notification.dto.OutboxEventDto;
 import com.tsu.notification.entities.OutboxEvent;
 import com.tsu.notification.infrastructure.dispatcher.NotificationEventHandler;
 import com.tsu.notification.infrastructure.queue.OutboxEventMessage;
 import com.tsu.notification.infrastructure.queue.QueueMessage;
+import com.tsu.notification.val.OutboxEventVal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -78,14 +81,7 @@ public class SqsQueueConsumerLambdaHandler implements RequestHandler<SQSEvent, V
             OutboxEventMessage eventMessage = queueMessage.getPayload();
 
             // Convert to OutboxEvent
-            OutboxEvent outboxEvent = OutboxEvent.builder()
-                .id(eventMessage.getEventId())
-                .aggregateType(eventMessage.getAggregateType())
-                .aggregateId(eventMessage.getAggregateId())
-                .eventType(eventMessage.getEventType())
-                .payload(eventMessage.getPayload())
-                .partitionKey(eventMessage.getPartitionKey())
-                .build();
+            OutboxEventVal outboxEvent = new OutboxEventVal(eventMessage.getEventId(),eventMessage.getMessageType(),eventMessage.getMessageId(), eventMessage.getEventType());
 
             // Process event
             eventHandler.handle(outboxEvent);

@@ -33,15 +33,8 @@ public class OutboxEventMessage {
      */
     private UUID messageId;
 
-    /**
-     * Type of event (e.g., NOTIFICATION_CREATED, DELIVERY_REQUESTED)
-     */
     private String eventType;
 
-    /**
-     * Event payload/data
-     */
-    private Map<String, Object> payload;
 
     /**
      * Partition key for ordering (optional)

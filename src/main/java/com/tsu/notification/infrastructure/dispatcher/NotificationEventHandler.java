@@ -18,7 +18,6 @@ import java.util.UUID;
 @Slf4j
 public class NotificationEventHandler {
 
-    private final NotificationChannelDeliveryRepository deliveryRepository;
     private final ChannelDispatcherFactory channelDispatcherFactory;
 
     public void handle(OutboxEvent event) {

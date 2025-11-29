@@ -88,8 +88,5 @@ public class EmailChannelDispatcher implements ChannelDispatcher {
         }
     }
 
-    @Override
-    public boolean supports(NotificationChannelDelivery delivery) {
-        return delivery.getChannel() == DeliveryChannel.EMAIL;
-    }
+
 }

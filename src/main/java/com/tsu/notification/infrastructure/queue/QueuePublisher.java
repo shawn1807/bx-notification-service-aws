@@ -1,7 +1,6 @@
 package com.tsu.notification.infrastructure.queue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tsu.notification.entities.OutboxEventTb;
 import com.tsu.notification.entities.OutboxMessageTb;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

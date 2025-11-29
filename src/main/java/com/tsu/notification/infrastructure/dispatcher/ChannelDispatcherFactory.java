@@ -40,16 +40,16 @@ public class ChannelDispatcherFactory {
             ));
     }
 
-    private DeliveryChannel extractChannel(ChannelDispatcher dispatcher) {
+    private MessageChannel extractChannel(ChannelDispatcher dispatcher) {
         // Map dispatcher types to channels
         if (dispatcher instanceof EmailChannelDispatcher) {
-            return DeliveryChannel.EMAIL;
+            return MessageChannel.email;
         } else if (dispatcher instanceof SmsChannelDispatcher) {
-            return DeliveryChannel.SMS;
+            return MessageChannel.sms;
         } else if (dispatcher instanceof PushChannelDispatcher) {
-            return DeliveryChannel.PUSH;
+            return MessageChannel.notification;
         } else if (dispatcher instanceof InAppChannelDispatcher) {
-            return DeliveryChannel.IN_APP;
+            return MessageChannel.app;
         }
         throw new IllegalArgumentException("Unknown dispatcher type: " + dispatcher.getClass());
     }
