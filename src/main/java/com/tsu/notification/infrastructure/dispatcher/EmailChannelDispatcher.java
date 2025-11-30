@@ -1,11 +1,15 @@
 package com.tsu.notification.infrastructure.dispatcher;
 
 import com.tsu.enums.MessageStatus;
+import com.tsu.enums.OutboxStatus;
 import com.tsu.notification.entities.EmailMessageTb;
+import com.tsu.notification.entities.OutboxMessageTb;
 import com.tsu.notification.infrastructure.adapter.EmailSenderAdapter;
 import com.tsu.notification.infrastructure.adapter.SendResult;
 import com.tsu.notification.infrastructure.queue.OutboxEventMessage;
 import com.tsu.notification.repo.EmailMessageRepository;
+import com.tsu.notification.repo.OutboxMessageRepository;
+import com.tsu.util.BackoffUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -23,21 +27,30 @@ import java.util.Map;
 @Slf4j
 public class EmailChannelDispatcher implements ChannelDispatcher {
 
+    private static final int INITIAL_DELAY = 60;
+    private static final int MAX_DELAY = 600;
     private final EmailSenderAdapter emailSenderAdapter;
     private final EmailMessageRepository emailMessageRepository;
+    private final OutboxMessageRepository outboxMessageRepository;
 
     @Override
     @Transactional
     public void dispatch(OutboxEventMessage message) {
-        emailMessageRepository.findById(message.getMessageId())
-                .ifPresentOrElse(this::sendEmail, () -> log.warn("Delivery not supported by EmailChannelDispatcher: {} ({})", message.getMessageType(), message.getMessageId()));
-        // Idempotency check
-
+        outboxMessageRepository.findById(message.getEventId())
+                .ifPresent(outbox -> emailMessageRepository.findById(message.getMessageId())
+                        .ifPresentOrElse(tb -> sendEmail(outbox, tb),
+                                () -> {
+                                    outbox.setStatus(OutboxStatus.INVALID);
+                                    outbox.setLastError("message not found");
+                                    log.warn("Delivery not supported by EmailChannelDispatcher: {} ({})", message.getMessageType(), message.getMessageId());
+                                }));
     }
 
-    private void sendEmail(EmailMessageTb email) {
+    private void sendEmail(OutboxMessageTb outbox, EmailMessageTb email) {
         if (email.getStatus() == MessageStatus.sent) {
             log.info("Email already sent, skipping: message id={}", email.getId());
+            outbox.setStatus(OutboxStatus.PROCESSED);
+            outboxMessageRepository.save(outbox);
             return;
         }
         LocalDateTime now = LocalDateTime.now();
@@ -46,32 +59,33 @@ public class EmailChannelDispatcher implements ChannelDispatcher {
             email.setLastAttemptDate(now);
             email.setStatus(MessageStatus.sending);
             emailMessageRepository.save(email);
-
             // Send email
-            log.info("Sending email: {}, to={}, cc={}", email.getId(), email.getToEmail(), email.getCcEmail());
+            log.info("Sending email: {}, to={}", email.getId(), email.getToEmail());
             SendResult result = emailSenderAdapter.sendEmail(
                     email.getToEmail(),
-                    email.getCcEmail(),
                     email.getSubject(),
                     email.getBody(),
                     buildMetadata(email)
             );
-
             if (result.isSuccess()) {
                 // Mark as sent
                 email.setSentDate(now);
                 email.setStatus(MessageStatus.sent);
                 emailMessageRepository.save(email);
+
+                outbox.setStatus(OutboxStatus.PROCESSED);
+                outbox.setProcessedDate(LocalDateTime.now());
+                outboxMessageRepository.save(outbox);
                 log.info("Email sent successfully: id={}, providerId={}",
                         email.getId(), result.getProviderId());
             } else {
                 // Handle failure with retry
-                handleFailure(email, result.getErrorMessage(), result.getErrorCode());
+                handleFailure(outbox, email, result.getErrorMessage(), result.getErrorCode());
             }
 
         } catch (Exception e) {
             log.error("Error sending email: id={}", email.getId(), e);
-            handleFailure(email, e.getMessage(), "EXCEPTION");
+            handleFailure(outbox, email, e.getMessage(), "EXCEPTION");
         }
     }
 
@@ -79,8 +93,15 @@ public class EmailChannelDispatcher implements ChannelDispatcher {
         return new HashMap<>();
     }
 
-    private void handleFailure(EmailMessageTb email, String error, String errorCode) {
-        email.setLastError(error);
+    private void handleFailure(OutboxMessageTb outbox, EmailMessageTb email, String error, String errorCode) {
+        String fullError = errorCode + ": " + error;
+        outbox.setLastError(fullError);
+        outbox.setStatus(OutboxStatus.FAILED);
+        outbox.setAttemptCount(outbox.getAttemptCount() + 1);
+        outbox.setNextAttemptDate(BackoffUtils.exponential(outbox.getAttemptCount(), INITIAL_DELAY, MAX_DELAY));
+        outboxMessageRepository.save(outbox);
+
+        email.setLastError(fullError);
         email.setAttempts(email.getAttempts() + 1);
         email.setStatus(MessageStatus.failed);
         emailMessageRepository.save(email);

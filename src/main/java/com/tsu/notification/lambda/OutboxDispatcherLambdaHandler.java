@@ -46,7 +46,7 @@ public class OutboxDispatcherLambdaHandler implements RequestHandler<ScheduledEv
     @Override
     public String handleRequest(ScheduledEvent event, Context context) {
         log.info("Outbox Dispatcher Lambda invoked: time={}, requestId={}",
-            event.getTime(), context.getRequestId());
+            event.getTime(), context.getAwsRequestId());
 
         long startTime = System.currentTimeMillis();
         int processedCount = 0;
@@ -58,7 +58,7 @@ public class OutboxDispatcherLambdaHandler implements RequestHandler<ScheduledEv
             long duration = System.currentTimeMillis() - startTime;
             String result = String.format(
                 "Outbox dispatch completed: duration=%dms, requestId=%s",
-                duration, context.getRequestId()
+                duration, context.getAwsRequestId()
             );
 
             log.info(result);

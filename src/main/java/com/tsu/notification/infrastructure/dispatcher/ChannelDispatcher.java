@@ -7,7 +7,8 @@ import com.tsu.notification.infrastructure.queue.OutboxEventMessage;
  */
 public interface ChannelDispatcher {
 
- 
+
     void dispatch(OutboxEventMessage delivery);
+
 
 }

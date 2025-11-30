@@ -1,7 +1,6 @@
 package com.tsu.notification.infrastructure.adapter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tsu.notification.entities.DevicePushToken;
 import com.tsu.enums.PushPlatform;
 import com.tsu.notification.val.DevicePushTokenVal;
 import lombok.RequiredArgsConstructor;
@@ -60,7 +59,7 @@ public class AwsSnsPushSenderAdapter {
         Map<String, Object> metadata
     ) {
         log.info("Sending push notification via AWS SNS: platform={}, deviceId={}",
-            deviceToken.getPlatform(), deviceToken.getDeviceId());
+            deviceToken.(), deviceToken.getDeviceId());
 
         try {
             // Get or create SNS endpoint for device

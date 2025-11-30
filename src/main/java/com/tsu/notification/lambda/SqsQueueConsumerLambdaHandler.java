@@ -4,22 +4,18 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.SQSEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tsu.notification.dto.OutboxEvent;
-import com.tsu.notification.dto.OutboxEventDto;
-import com.tsu.notification.entities.OutboxEvent;
 import com.tsu.notification.infrastructure.dispatcher.OutboxEventMessageHandler;
 import com.tsu.notification.infrastructure.queue.OutboxEventMessage;
 import com.tsu.notification.infrastructure.queue.QueueMessage;
-import com.tsu.notification.val.OutboxEventVal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 /**
  * AWS Lambda handler for SQS events
- *
+ * <p>
  * Processes notification events from SQS queue
- *
+ * <p>
  * Usage:
  * - Handler: com.tsu.notification.lambda.SqsQueueConsumerLambdaHandler::handleRequest
  * - Runtime: java21
@@ -39,7 +35,7 @@ public class SqsQueueConsumerLambdaHandler implements RequestHandler<SQSEvent, V
         try {
             log.info("Initializing Spring Application Context for SQS Lambda");
             applicationContext = new AnnotationConfigApplicationContext(
-                LambdaConfiguration.class
+                    LambdaConfiguration.class
             );
             eventHandler = applicationContext.getBean(OutboxEventMessageHandler.class);
             objectMapper = applicationContext.getBean(ObjectMapper.class);
@@ -53,7 +49,7 @@ public class SqsQueueConsumerLambdaHandler implements RequestHandler<SQSEvent, V
     @Override
     public Void handleRequest(SQSEvent event, Context context) {
         log.info("SQS Lambda invoked: messageCount={}, requestId={}",
-            event.getRecords().size(), context.getRequestId());
+                event.getRecords().size(), context.getAwsRequestId());
 
         for (SQSEvent.SQSMessage message : event.getRecords()) {
             processMessage(message, context);
@@ -71,23 +67,20 @@ public class SqsQueueConsumerLambdaHandler implements RequestHandler<SQSEvent, V
 
             // Parse queue message
             QueueMessage<OutboxEventMessage> queueMessage = objectMapper.readValue(
-                message.getBody(),
-                objectMapper.getTypeFactory().constructParametricType(
-                    QueueMessage.class,
-                    OutboxEventMessage.class
-                )
+                    message.getBody(),
+                    objectMapper.getTypeFactory().constructParametricType(
+                            QueueMessage.class,
+                            OutboxEventMessage.class
+                    )
             );
 
             OutboxEventMessage eventMessage = queueMessage.getPayload();
 
-            // Convert to OutboxEvent
-            OutboxEventVal outboxEvent = new OutboxEventVal(eventMessage.getEventId(),eventMessage.getMessageType(),eventMessage.getMessageId(), eventMessage.getEventType());
-
             // Process event
-            eventHandler.handle(outboxEvent);
+            eventHandler.handle(eventMessage);
 
             log.info("SQS message processed successfully: messageId={}, eventType={}",
-                message.getMessageId(), eventMessage.getEventType());
+                    message.getMessageId(), eventMessage.getEventType());
 
         } catch (Exception e) {
             log.error("Failed to process SQS message: messageId={}", message.getMessageId(), e);

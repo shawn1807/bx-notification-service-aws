@@ -48,9 +48,7 @@ public class ChannelDispatcherFactory {
             return MessageChannel.sms;
         } else if (dispatcher instanceof PushChannelDispatcher) {
             return MessageChannel.notification;
-        } else if (dispatcher instanceof InAppChannelDispatcher) {
-            return MessageChannel.app;
-        }
+        } 
         throw new IllegalArgumentException("Unknown dispatcher type: " + dispatcher.getClass());
     }
 }

@@ -1,6 +1,8 @@
 package com.tsu.notification.infrastructure.dispatcher;
 
+import com.tsu.enums.OutboxStatus;
 import com.tsu.notification.infrastructure.queue.OutboxEventMessage;
+import com.tsu.notification.repo.OutboxMessageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Component;
 public class OutboxEventMessageHandler {
 
     private final ChannelDispatcherFactory channelDispatcherFactory;
+    private final OutboxMessageRepository messageRepository;
 
     public void handle(OutboxEventMessage event) {
         String eventType = event.getEventType();

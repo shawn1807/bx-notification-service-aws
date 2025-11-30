@@ -37,8 +37,8 @@ public class AwsSesSenderAdapter implements EmailSenderAdapter {
     private String configurationSet;
 
     @Override
-    public SendResult sendEmail(String to, String cc, String subject, String body, Map<String, Object> metadata) {
-        log.info("Sending email via AWS SES to: {} cc: {}, subject: {}", to, cc, subject);
+    public SendResult sendEmail(String to, String subject, String body, Map<String, Object> metadata) {
+        log.info("Sending email via AWS SES to: {} , subject: {}", to, subject);
 
         try {
             // Build message
@@ -58,7 +58,6 @@ public class AwsSesSenderAdapter implements EmailSenderAdapter {
             // Build destination
             Destination destination = Destination.builder()
                     .toAddresses(to)
-                    .ccAddresses(cc)
                     .build();
 
             // Build request
@@ -81,14 +80,14 @@ public class AwsSesSenderAdapter implements EmailSenderAdapter {
             SendEmailResponse response = sesClient.sendEmail(requestBuilder.build());
             String messageId = response.messageId();
 
-            log.info("Email sent successfully via AWS SES: messageId={}, to={}, cc={}",
-                    messageId, to, cc);
+            log.info("Email sent successfully via AWS SES: messageId={}, to={}",
+                    messageId, to);
 
             return SendResult.success(messageId, "AWS_SES");
 
         } catch (MessageRejectedException e) {
-            log.error("AWS SES rejected email: to={}, cc={}, reason={}",
-                    to, cc, e.awsErrorDetails().errorMessage());
+            log.error("AWS SES rejected email: to={}, reason={}",
+                    to,  e.awsErrorDetails().errorMessage());
             return SendResult.failure(
                     "Email rejected: " + e.awsErrorDetails().errorMessage(),
                     "SES_REJECTED"

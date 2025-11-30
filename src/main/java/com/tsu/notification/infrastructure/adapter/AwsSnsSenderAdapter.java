@@ -146,40 +146,8 @@ public class AwsSnsSenderAdapter implements SmsSenderAdapter {
         return attributes;
     }
 
-    /**
-     * Get SNS SMS spending and quota information
-     */
-    public Map<String, String> getSmsQuota() {
-        try {
-            GetSMSAttributesRequest request = GetSMSAttributesRequest.builder()
-                .attributes("MonthlySpendLimit", "DeliveryStatusIAMRole")
-                .build();
 
-            GetSMSAttributesResponse response = snsClient.getSMSAttributes(request);
-            return response.attributes();
 
-        } catch (Exception e) {
-            log.error("Failed to get SNS SMS attributes", e);
-            return Map.of();
-        }
-    }
-
-    /**
-     * Set SNS SMS attributes (monthly spending limit, default sender ID, etc.)
-     */
-    public void setSmsAttributes(Map<String, String> attributes) {
-        try {
-            SetSMSAttributesRequest request = SetSMSAttributesRequest.builder()
-                .attributes(attributes)
-                .build();
-
-            snsClient.setSMSAttributes(request);
-            log.info("SNS SMS attributes updated: {}", attributes);
-
-        } catch (Exception e) {
-            log.error("Failed to set SNS SMS attributes", e);
-        }
-    }
 
     /**
      * Check if SNS is healthy

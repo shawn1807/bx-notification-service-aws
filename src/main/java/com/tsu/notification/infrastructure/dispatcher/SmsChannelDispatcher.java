@@ -1,13 +1,23 @@
 package com.tsu.notification.infrastructure.dispatcher;
 
-import com.tsu.notification.enums.DeliveryStatus;
+import com.tsu.enums.MessageStatus;
+import com.tsu.enums.OutboxStatus;
+import com.tsu.notification.entities.OutboxMessageTb;
+import com.tsu.notification.entities.SmsMessageTb;
 import com.tsu.notification.infrastructure.adapter.SendResult;
 import com.tsu.notification.infrastructure.adapter.SmsSenderAdapter;
 import com.tsu.notification.infrastructure.queue.OutboxEventMessage;
+import com.tsu.notification.repo.OutboxMessageRepository;
+import com.tsu.notification.repo.SmsMessageRepository;
+import com.tsu.util.BackoffUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Dispatcher for SMS notifications
@@ -17,71 +27,87 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 public class SmsChannelDispatcher implements ChannelDispatcher {
 
+    private static final int INITIAL_DELAY = 10;
+    private static final int MAX_DELAY = 180;
+
     private final SmsSenderAdapter smsSenderAdapter;
+    private final OutboxMessageRepository outboxMessageRepository;
+    private final SmsMessageRepository smsMessageRepository;
 
     @Override
     @Transactional
-    public void dispatch(OutboxEventMessage delivery) {
-        if (!supports(delivery)) {
-            log.warn("Delivery not supported by SmsChannelDispatcher: {}", delivery.getChannel());
+    public void dispatch(OutboxEventMessage message) {
+        outboxMessageRepository.findById(message.getEventId())
+                .ifPresent(outbox -> smsMessageRepository.findById(message.getMessageId())
+                        .ifPresentOrElse(tb -> sendSms(outbox, tb),
+                                () -> {
+                                    outbox.setStatus(OutboxStatus.INVALID);
+                                    outbox.setLastError("message not found");
+                                    log.warn("Delivery not supported by EmailChannelDispatcher: {} ({})", message.getMessageType(), message.getMessageId());
+                                }));
+    }
+
+    private void sendSms(OutboxMessageTb outbox, SmsMessageTb sms) {
+        if (sms.getStatus() == MessageStatus.sent) {
+            log.info("Sms already sent, skipping: message id={}", sms.getId());
+            outbox.setStatus(OutboxStatus.PROCESSED);
+            outboxMessageRepository.save(outbox);
             return;
         }
-
-        // Idempotency check
-        if (delivery.getProviderId() != null && delivery.getStatus() == DeliveryStatus.SENT) {
-            log.info("SMS already sent, skipping: deliveryId={}, providerId={}",
-                    delivery.getId(), delivery.getProviderId());
-            return;
-        }
-
+        LocalDateTime now = LocalDateTime.now();
         try {
-            delivery.setStatus(DeliveryStatus.PROCESSING);
-            deliveryRepository.save(delivery);
-
-            Notification notification = notificationRepository.findById(delivery.getNotificationId())
-                    .orElseThrow(() -> new IllegalStateException("Notification not found: " + delivery.getNotificationId()));
-
-            log.info("Sending SMS: deliveryId={}, recipient={}", delivery.getId(), delivery.getRecipient());
+            // Mark as processing
+            sms.setLastAttemptDate(now);
+            sms.setStatus(MessageStatus.sending);
+            smsMessageRepository.save(sms);
+            // Send email
+            log.info("Sending sms: {}, to={}", sms.getId(), sms.getPhoneNumber());
             SendResult result = smsSenderAdapter.sendSms(
-                    delivery.getRecipient(),
-                    notification.getBody(),
-                    notification.getMetadata()
+                    sms.getPhoneNumber(),
+                    sms.getBody(),
+                    buildMetadata(sms)
             );
-
             if (result.isSuccess()) {
-                delivery.markAsSent(result.getProviderId(), result.getProviderName());
-                deliveryRepository.save(delivery);
-                auditService.logDeliverySent(delivery, "SYSTEM");
+                // Mark as sent
+                sms.setSentDate(now);
+                sms.setStatus(MessageStatus.sent);
+                smsMessageRepository.save(sms);
 
-                log.info("SMS sent successfully: deliveryId={}, providerId={}",
-                        delivery.getId(), result.getProviderId());
+                outbox.setStatus(OutboxStatus.PROCESSED);
+                outbox.setProcessedDate(LocalDateTime.now());
+                outboxMessageRepository.save(outbox);
+                log.info("Sms sent successfully: id={}, providerId={}",
+                        sms.getId(), result.getProviderId());
             } else {
-                handleFailure(delivery, result.getErrorMessage(), result.getErrorCode());
+                // Handle failure with retry
+                handleFailure(outbox, sms, result.getErrorMessage(), result.getErrorCode());
             }
 
         } catch (Exception e) {
-            log.error("Error sending SMS: deliveryId={}", delivery.getId(), e);
-            handleFailure(delivery, e.getMessage(), "EXCEPTION");
+            log.error("Error sending sms: id={}", sms.getId(), e);
+            handleFailure(outbox, sms, e.getMessage(), "EXCEPTION");
         }
     }
 
-    private void handleFailure(NotificationChannelDelivery delivery, String error, String errorCode) {
-        delivery.markAsFailed(error, errorCode);
-        deliveryRepository.save(delivery);
-        auditService.logDeliveryFailed(delivery, error);
-
-        if (delivery.getStatus() == DeliveryStatus.PERMANENT_FAILURE) {
-            log.error("SMS permanently failed after {} attempts: deliveryId={}",
-                    delivery.getAttemptCount(), delivery.getId());
-        } else {
-            log.warn("SMS failed, will retry at {}: deliveryId={}, attempt={}/{}",
-                    delivery.getNextAttemptAt(), delivery.getId(),
-                    delivery.getAttemptCount(), delivery.getMaxAttempts());
-        }
+    private Map<String, Object> buildMetadata(SmsMessageTb sms) {
+        return new HashMap<>();
     }
 
-    @Override
-    public boolean supports(NotificationChannelDelivery delivery) {
-        return delivery.getChannel() == DeliveryChannel.SMS;
+    private void handleFailure(OutboxMessageTb outbox, SmsMessageTb sms, String error, String errorCode) {
+        String fullError = errorCode + ": " + error;
+        outbox.setLastError(fullError);
+        outbox.setStatus(OutboxStatus.FAILED);
+        outbox.setAttemptCount(outbox.getAttemptCount() + 1);
+        outbox.setNextAttemptDate(BackoffUtils.exponential(outbox.getAttemptCount(), INITIAL_DELAY, MAX_DELAY));
+        outboxMessageRepository.save(outbox);
+
+        sms.setLastError(fullError);
+        sms.setAttempts(sms.getAttempts() + 1);
+        sms.setStatus(MessageStatus.failed);
+        smsMessageRepository.save(sms);
+        log.error("Sms permanently failed after {} attempts: deliveryId={}",
+                sms.getAttempts(), sms.getId());
     }
+
+
 }

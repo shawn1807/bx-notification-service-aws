@@ -41,18 +41,12 @@ public class OutboxDispatcher {
     public void pollAndDispatch() {
         try {
             List<OutboxMessageTb> events = fetchPendingEvents();
-
             if (events.isEmpty()) {
                 log.trace("No pending outbox events");
                 return;
             }
-
             log.info("Processing {} outbox events", events.size());
-
-            for (OutboxMessageTb event : events) {
-                processEvent(event);
-            }
-
+            events.forEach(this::processEvent);
         } catch (Exception e) {
             log.error("Error in outbox dispatcher", e);
         }
@@ -63,7 +57,7 @@ public class OutboxDispatcher {
      */
     @Transactional
     protected List<OutboxMessageTb> fetchPendingEvents() {
-        return outboxMessageRepository.findOutboxMessageForUpdate(OutboxStatus.PENDING, LocalDateTime.now(), BATCH_SIZE);
+        return outboxMessageRepository.findOutboxMessageForUpdate(LocalDateTime.now(), BATCH_SIZE);
     }
 
     /**
@@ -75,18 +69,11 @@ public class OutboxDispatcher {
             log.debug("Publishing outbox event to queue: id={}, type={}, aggregateId={}",
                     event.getId(), event.getEventType(), event.getMessageId());
 
-            event.markAsProcessing();
+            event.setProcessingStartedDate(LocalDateTime.now());
             outboxMessageRepository.save(event);
-
             // Publish to message queue (decouples from event handler)
-            String messageId = queuePublisher.publishOutboxEvent(event);
-
-            // Mark as processed (successfully published to queue)
-            event.markAsProcessed();
-            outboxMessageRepository.save(event);
-
-            log.info("Outbox event published to queue: id={}, messageId={}", event.getId(), messageId);
-
+            String queueId = queuePublisher.publishOutboxEvent(event);
+            log.info("Outbox event published to queue: id={}, queueId={}", event.getId(), queueId);
         } catch (Exception e) {
             log.error("Failed to publish outbox event to queue: id={}", event.getId(), e);
             event.markAsFailed(e.getMessage());
@@ -100,7 +87,7 @@ public class OutboxDispatcher {
     @Scheduled(cron = "0 0 2 * * *") // 2 AM daily
     @Transactional
     public void cleanupProcessedEvents() {
-        Instant threshold = Instant.now().minusSeconds(7 * 24 * 3600); // 7 days ago
+        LocalDateTime threshold = LocalDateTime.now().minusSeconds(7 * 24 * 3600); // 7 days ago
         int deleted = outboxMessageRepository.deleteProcessedMessagesBefore(threshold);
         log.info("Deleted {} old processed outbox events", deleted);
     }
@@ -111,7 +98,7 @@ public class OutboxDispatcher {
     @Scheduled(cron = "0 0 * * * *") // Every hour
     @Transactional
     public void resetStuckMessages() {
-        Instant threshold = Instant.now().minusSeconds(3600); // 1 hour ago
+        LocalDateTime threshold = LocalDateTime.now().minusSeconds(3600); // 1 hour ago
         List<UUID> stuckMessages = outboxMessageRepository.findStuckMessages(threshold)
                 .map(OutboxMessageTb::getId)
                 .toList();

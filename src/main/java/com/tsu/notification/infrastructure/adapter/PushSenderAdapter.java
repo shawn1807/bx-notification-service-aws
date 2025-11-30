@@ -1,6 +1,6 @@
 package com.tsu.notification.infrastructure.adapter;
 
-import com.tsu.notification.entities.DevicePushToken;
+import com.tsu.notification.entities.DevicePushTokenTb;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -28,7 +28,7 @@ public class PushSenderAdapter {
      * @return SendResult with provider message ID
      */
     public SendResult sendPush(
-        DevicePushToken deviceToken,
+        DevicePushTokenTb deviceToken,
         String title,
         String body,
         Map<String, Object> metadata

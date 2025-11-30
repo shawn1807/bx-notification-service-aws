@@ -18,8 +18,8 @@ import java.util.UUID;
 public class MockEmailSenderAdapter implements EmailSenderAdapter {
 
     @Override
-    public SendResult sendEmail(String to,String cc, String subject, String body, Map<String, Object> metadata) {
-        log.info("MOCK: Sending email to: {}, cc: {}, subject: {}", to, cc, subject);
+    public SendResult sendEmail(String to, String subject, String body, Map<String, Object> metadata) {
+        log.info("MOCK: Sending email to: {}, subject: {}", to, subject);
 
         try {
             // Simulate successful send
@@ -36,9 +36,9 @@ public class MockEmailSenderAdapter implements EmailSenderAdapter {
 
     @Override
     public SendResult sendTemplatedEmail(
-        String recipient,
-        String templateId,
-        Map<String, Object> templateData
+            String recipient,
+            String templateId,
+            Map<String, Object> templateData
     ) {
         log.info("MOCK: Sending templated email: recipient={}, templateId={}", recipient, templateId);
 
