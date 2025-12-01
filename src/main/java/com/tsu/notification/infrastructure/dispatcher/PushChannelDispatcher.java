@@ -114,6 +114,8 @@ public class PushChannelDispatcher implements ChannelDispatcher {
                             }
                         });
                         if (anySuccess.get()) {
+                            notification.setBroadcast(true);
+                            notificationRepository.save(notification);
                             recipient.setStatus(DeliveryStatus.delivered);
                             recipient.setDeliveredDate(now);
                             recipientRepository.save(recipient);
