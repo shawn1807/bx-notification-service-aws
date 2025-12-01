@@ -56,15 +56,16 @@ public class PushChannelDispatcher implements ChannelDispatcher {
                                     });
                 });
     }
-    private boolean enableNotification(UUID userId){
+
+    private boolean enableNotification(UUID userId) {
         //todo
         return true;
     }
 
     private void pushNotifications(OutboxMessageTb outbox, NotificationTb notification) {
-        recipientRepository.findByNotificationIdAndStatusList(notification.getId(),List.of(DeliveryStatus.queued,DeliveryStatus.failed))
+        recipientRepository.findByNotificationIdAndStatusList(notification.getId(), List.of(DeliveryStatus.queued, DeliveryStatus.failed))
                 .forEach(recipient -> {
-                    if (recipient.getDeliveryStatus() == DeliveryStatus.delivered) {
+                    if (recipient.getStatus() == DeliveryStatus.delivered) {
                         log.info("notification already delivered, skipping: message id={}", notification.getId());
                         outbox.setStatus(OutboxStatus.PROCESSED);
                         outboxMessageRepository.save(outbox);
@@ -72,8 +73,8 @@ public class PushChannelDispatcher implements ChannelDispatcher {
                     }
                     LocalDateTime now = LocalDateTime.now();
                     recipient.setLastAttemptDate(now);
-                    if(!enableNotification(recipient.getUserId())){
-                        recipient.setDeliveryStatus(DeliveryStatus.skipped);
+                    if (!enableNotification(recipient.getUserId())) {
+                        recipient.setStatus(DeliveryStatus.skipped);
                         recipientRepository.save(recipient);
                         return;
                     }
@@ -83,7 +84,7 @@ public class PushChannelDispatcher implements ChannelDispatcher {
                             .toList();
                     try {
                         // Mark as processing
-                        recipient.setDeliveryStatus(DeliveryStatus.sending);
+                        recipient.setStatus(DeliveryStatus.sending);
                         recipientRepository.save(recipient);
                         // Send email
                         Map<String, Object> metadata = buildMetadata(notification);
@@ -113,7 +114,7 @@ public class PushChannelDispatcher implements ChannelDispatcher {
                             }
                         });
                         if (anySuccess.get()) {
-                            recipient.setDeliveryStatus(DeliveryStatus.delivered);
+                            recipient.setStatus(DeliveryStatus.delivered);
                             recipient.setDeliveredDate(now);
                             recipientRepository.save(recipient);
                             log.info("Push sent successfully to at least one device: recipientId={}", recipient.getId());
@@ -121,7 +122,7 @@ public class PushChannelDispatcher implements ChannelDispatcher {
                             outbox.setProcessedDate(LocalDateTime.now());
                             outboxMessageRepository.save(outbox);
                         } else {
-                            handleFailure(outbox, recipient, !lastError.isEmpty()? lastError.toString() : "Failed to send to all devices", "PUSH_FAILED");
+                            handleFailure(outbox, recipient, !lastError.isEmpty() ? lastError.toString() : "Failed to send to all devices", "PUSH_FAILED");
                         }
                     } catch (Exception e) {
                         log.error("Error sending push token: id={}", recipient.getId(), e);
@@ -145,7 +146,7 @@ public class PushChannelDispatcher implements ChannelDispatcher {
 
         recipient.setLastError(fullError);
         recipient.setAttempts(recipient.getAttempts() + 1);
-        recipient.setDeliveryStatus(DeliveryStatus.failed);
+        recipient.setStatus(DeliveryStatus.failed);
         recipientRepository.save(recipient);
         log.error("notification failed after {} attempts: deliveryId={}",
                 recipient.getAttempts(), recipient.getId());

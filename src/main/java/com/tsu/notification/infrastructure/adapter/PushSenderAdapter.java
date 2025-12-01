@@ -1,13 +1,25 @@
 package com.tsu.notification.infrastructure.adapter;
 
+import com.eatthepath.pushy.apns.ApnsClient;
+import com.eatthepath.pushy.apns.ApnsClientBuilder;
+import com.eatthepath.pushy.apns.PushNotificationResponse;
+import com.eatthepath.pushy.apns.auth.ApnsSigningKey;
+import com.eatthepath.pushy.apns.util.SimpleApnsPayloadBuilder;
+import com.eatthepath.pushy.apns.util.SimpleApnsPushNotification;
+import com.eatthepath.pushy.apns.util.concurrent.PushNotificationFuture;
+import com.google.firebase.ErrorCode;
+import com.google.firebase.messaging.FirebaseMessaging;
+import com.google.firebase.messaging.FirebaseMessagingException;
+import com.google.firebase.messaging.Message;
+import com.google.firebase.messaging.Notification;
 import com.tsu.notification.entities.DevicePushTokenTb;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Adapter for sending push notifications via FCM and APNs
@@ -28,13 +40,13 @@ public class PushSenderAdapter {
      * @return SendResult with provider message ID
      */
     public SendResult sendPush(
-        DevicePushTokenTb deviceToken,
-        String title,
-        String body,
-        Map<String, Object> metadata
+            DevicePushTokenTb deviceToken,
+            String title,
+            String body,
+            Map<String, Object> metadata
     ) {
         log.info("Sending push notification: platform={}, deviceId={}",
-            deviceToken.getPlatform(), deviceToken.getDeviceId());
+                deviceToken.getPlatform(), deviceToken.getDeviceId());
 
         try {
             return switch (deviceToken.getPlatform()) {
@@ -53,49 +65,37 @@ public class PushSenderAdapter {
      */
     private SendResult sendFcmPush(String token, String title, String body, Map<String, Object> metadata) {
         log.info("Sending FCM push");
-
         try {
-            // TODO: Integrate with Firebase Admin SDK
-            // Dependency: com.google.firebase:firebase-admin
-
-            /*
-            Example FCM HTTP v1 implementation:
-
-            FirebaseApp firebaseApp = FirebaseApp.getInstance();
-
+            FirebaseMessaging messaging = FirebaseMessaging.getInstance();
             Message message = Message.builder()
-                .setToken(token)
-                .setNotification(Notification.builder()
-                    .setTitle(title)
-                    .setBody(body)
-                    .build())
-                .putAllData(convertMetadataToStringMap(metadata))
-                .setAndroidConfig(AndroidConfig.builder()
-                    .setPriority(AndroidConfig.Priority.HIGH)
-                    .build())
-                .build();
-
-            String messageId = FirebaseMessaging.getInstance(firebaseApp)
-                .send(message);
-
+                    .setToken(token)
+                    .setNotification(Notification.builder()
+                            .setTitle(title)
+                            .setBody(body)
+                            .build())
+                    .putAllData(convertMetadataToStringMap(metadata))
+                    .build();
+            String messageId = messaging.send(message);
             return SendResult.success(messageId, "FCM");
-            */
-
-            // Simulate invalid token (for testing)
-            if (token.contains("invalid")) {
-                return SendResult.failure("Invalid registration token", "INVALID_TOKEN");
-            }
-
-            // Simulate successful send
-            String messageId = "fcm-" + UUID.randomUUID();
-            log.info("FCM push sent successfully: messageId={}", messageId);
-
-            return SendResult.success(messageId, "MOCK_FCM");
-
-        } catch (Exception e) {
+        } catch (FirebaseMessagingException e) {
             log.error("FCM send failed", e);
-            return SendResult.failure(e.getMessage(), "FCM_ERROR");
+            ErrorCode error = e.getErrorCode();  // ex: "UNREGISTERED", "INVALID_ARGUMENT"
+            log.warn("FCM error {} for token {}", error, token);
+            boolean isPermanent = false;
+            switch (error) {
+                case INVALID_ARGUMENT:
+                case NOT_FOUND:
+                    isPermanent = true;
+                default:
+            }
+            return SendResult.failure(e.getMessage(), error.name(), isPermanent);
         }
+    }
+
+    private boolean isFCMPermanentError(String error) {
+        return "UNREGISTERED".equals(error) ||
+                "INVALID_ARGUMENT".equals(error) ||
+                "REGISTRATION_TOKEN_NOT_REGISTERED".equals(error); // Android/FCM variant
     }
 
     /**
@@ -105,46 +105,44 @@ public class PushSenderAdapter {
         log.info("Sending APNs push");
 
         try {
-            // TODO: Integrate with APNs
-            // Library: com.eatthepath:pushy
+            String teamId = "YOUR_TEAM_ID";
+            String keyId = "YOUR_KEY_ID";
+            File p8KeyFile = new File("AuthKey_YOUR_KEY_ID.p8");
+            String bundleId = "com.yourapp.mobile"; // apns-topic
 
-            /*
-            Example APNs implementation using Pushy:
-
+            ApnsSigningKey signingKey = ApnsSigningKey.loadFromPkcs8File(
+                    p8KeyFile, teamId, keyId);
             ApnsClient apnsClient = new ApnsClientBuilder()
-                .setApnsServer(ApnsClientBuilder.PRODUCTION_APNS_HOST)
-                .setSigningKey(ApnsSigningKey.loadFromPkcs8File(
-                    new File(keyPath), teamId, keyId))
-                .build();
+                    .setApnsServer(ApnsClientBuilder.PRODUCTION_APNS_HOST)
+                    .setSigningKey(signingKey)
+                    .build();
+            String payload = new SimpleApnsPayloadBuilder()
+                    .setAlertTitle(title)
+                    .setAlertBody(body)
+                    .setSound("default")
+                    .build();
 
             SimpleApnsPushNotification pushNotification =
-                new SimpleApnsPushNotification(
-                    token,
-                    "com.yourcompany.app",
-                    buildApnsPayload(title, body, metadata)
-                );
+                    new SimpleApnsPushNotification(token, bundleId, payload);
 
-            PushNotificationFuture<SimpleApnsPushNotification, PushNotificationResponse<SimpleApnsPushNotification>>
-                sendNotificationFuture = apnsClient.sendNotification(pushNotification);
+            final PushNotificationFuture<SimpleApnsPushNotification, PushNotificationResponse<SimpleApnsPushNotification>> future =
+                    apnsClient.sendNotification(pushNotification);
 
-            PushNotificationResponse<SimpleApnsPushNotification> response =
-                sendNotificationFuture.get();
+            // Handle async response
+            final PushNotificationResponse<SimpleApnsPushNotification> response = future.get();
 
             if (response.isAccepted()) {
-                return SendResult.success(response.getApnsId().toString(), "APNS");
+                System.out.println("APNS accepted push");
             } else {
-                return SendResult.failure(
-                    response.getRejectionReason(),
-                    "APNS_REJECTED"
-                );
+                System.out.println("APNS rejected push: " + response.getRejectionReason());
+
+                if (response.getTokenInvalidationTimestamp().isPresent()) {
+                    // <<< THIS IS IMPORTANT >>>
+                    // You can mark token as invalid in DB
+                    System.out.println("Token is invalid -> deactivate");
+                }
             }
-            */
-
-            // Simulate successful send
-            String messageId = "apns-" + UUID.randomUUID();
-            log.info("APNs push sent successfully: messageId={}", messageId);
-
-            return SendResult.success(messageId, "MOCK_APNS");
+            return SendResult.success(response.getApnsId().toString(), "MOCK_APNS");
 
         } catch (Exception e) {
             log.error("APNs send failed", e);
@@ -152,65 +150,13 @@ public class PushSenderAdapter {
         }
     }
 
-    /**
-     * Build FCM payload
-     */
-    private Map<String, Object> buildFcmPayload(String title, String body, Map<String, Object> metadata) {
-        Map<String, Object> payload = new HashMap<>();
-
-        Map<String, String> notification = new HashMap<>();
-        notification.put("title", title);
-        notification.put("body", body);
-        payload.put("notification", notification);
-
-        if (metadata != null && !metadata.isEmpty()) {
-            payload.put("data", metadata);
-        }
-
-        return payload;
-    }
-
-    /**
-     * Build APNs payload
-     */
-    private String buildApnsPayload(String title, String body, Map<String, Object> metadata) {
-        // APNs uses JSON format
-        StringBuilder json = new StringBuilder("{");
-        json.append("\"aps\":{");
-        json.append("\"alert\":{");
-        json.append("\"title\":\"").append(escapeJson(title)).append("\",");
-        json.append("\"body\":\"").append(escapeJson(body)).append("\"");
-        json.append("},");
-        json.append("\"sound\":\"default\",");
-        json.append("\"badge\":1");
-        json.append("}");
-
-        if (metadata != null && !metadata.isEmpty()) {
-            // Add custom data
-            for (Map.Entry<String, Object> entry : metadata.entrySet()) {
-                json.append(",\"").append(entry.getKey()).append("\":\"")
-                    .append(entry.getValue()).append("\"");
-            }
-        }
-
-        json.append("}");
-        return json.toString();
-    }
-
-    private String escapeJson(String input) {
-        if (input == null) return "";
-        return input.replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r");
-    }
 
     private Map<String, String> convertMetadataToStringMap(Map<String, Object> metadata) {
         if (metadata == null) return Map.of();
 
         Map<String, String> result = new HashMap<>();
         metadata.forEach((key, value) ->
-            result.put(key, value != null ? value.toString() : "")
+                result.put(key, value != null ? value.toString() : "")
         );
         return result;
     }
