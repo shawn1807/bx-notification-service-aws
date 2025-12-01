@@ -89,7 +89,7 @@ public class AwsSnsPushSenderAdapter {
             return SendResult.success(messageId, "AWS_SNS_PUSH");
 
         } catch (EndpointDisabledException e) {
-            log.error("SNS endpoint disabled: deviceId={}", deviceToken.getDeviceId());
+            log.error("SNS endpoint disabled: deviceId={}", deviceToken.deviceId());
             return SendResult.failure("Push endpoint disabled", "SNS_ENDPOINT_DISABLED");
 
         } catch (InvalidParameterException e) {
