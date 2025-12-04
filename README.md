@@ -99,11 +99,13 @@ See [AWS_INTEGRATION.md](AWS_INTEGRATION.md) for AWS setup and configuration.
 
 ### Prerequisites
 
-- Java 17+
+- Java 21+
 - Maven 3.9+
 - PostgreSQL 14+
 - AWS SQS or LocalStack (for queue)
 - Docker (optional)
+- Firebase Admin SDK credentials (for FCM push notifications)
+- Apple APNs p8 key file (for iOS push notifications)
 
 ### Local Development
 
@@ -491,40 +493,85 @@ bx-notification/
 
 ## Push Notification Integration
 
+The system supports direct push notification delivery via FCM (Firebase Cloud Messaging) for Android and APNs (Apple Push Notification Service) for iOS. Device tokens are automatically managed through the Device API.
+
+### Device Registration
+
+Before sending push notifications, devices must register their push tokens:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/devices/push-token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user-123",
+    "deviceId": "device-abc-123",
+    "platform": "FCM",
+    "token": "fcm-token-xyz...",
+    "appVersion": "1.2.3",
+    "osVersion": "Android 13"
+  }'
+```
+
 ### FCM (Firebase Cloud Messaging)
 
-```java
-// Add dependency: com.google.firebase:firebase-admin:9.2.0
+The `PushSenderAdapter` integrates directly with Firebase Admin SDK (v9.2.0):
 
+```java
 Message message = Message.builder()
     .setToken(deviceToken)
     .setNotification(Notification.builder()
         .setTitle("New Order")
         .setBody("You have a new order")
         .build())
+    .putAllData(metadata)
     .build();
 
 String messageId = FirebaseMessaging.getInstance().send(message);
 ```
 
+**Error Handling**: The adapter automatically detects permanent errors (INVALID_ARGUMENT, NOT_FOUND, UNREGISTERED) and marks tokens as invalid.
+
+**Setup**:
+1. Download Firebase service account credentials JSON from Firebase Console
+2. Set environment variable: `GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json`
+3. Or initialize programmatically in your application
+
 See `docs/push-notifications/FCM_PAYLOADS.md` for detailed examples.
 
 ### APNs (Apple Push Notification Service)
 
+The `PushSenderAdapter` integrates with APNs using Pushy library (v0.15.2):
+
 ```java
-// Add dependency: com.eatthepath:pushy:0.15.2
+// Initialize APNs client with your credentials
+ApnsSigningKey signingKey = ApnsSigningKey.loadFromPkcs8File(
+    new File("AuthKey_YOUR_KEY_ID.p8"), "YOUR_TEAM_ID", "YOUR_KEY_ID"
+);
 
 ApnsClient apnsClient = new ApnsClientBuilder()
     .setApnsServer(ApnsClientBuilder.PRODUCTION_APNS_HOST)
     .setSigningKey(signingKey)
     .build();
 
-SimpleApnsPushNotification notification = new SimpleApnsPushNotification(
-    token, "com.yourapp", payload
-);
+// Build and send notification
+String payload = new SimpleApnsPayloadBuilder()
+    .setAlertTitle(title)
+    .setAlertBody(body)
+    .setSound("default")
+    .build();
+
+SimpleApnsPushNotification notification =
+    new SimpleApnsPushNotification(token, "com.yourapp.bundleId", payload);
 
 PushNotificationResponse response = apnsClient.sendNotification(notification).get();
 ```
+
+**Error Handling**: The adapter checks `response.getTokenInvalidationTimestamp()` to detect invalid tokens and marks them for cleanup.
+
+**Setup**:
+1. Download APNs Authentication Key (.p8 file) from Apple Developer Portal
+2. Configure in application: Team ID, Key ID, Bundle ID, and path to .p8 file
+3. Use PRODUCTION_APNS_HOST for production or DEVELOPMENT_APNS_HOST for testing
 
 See `docs/push-notifications/APNS_PAYLOADS.md` for detailed examples.
 

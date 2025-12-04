@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: fcm-test-app
+
+server:
+  port: 8081
+
+# Firebase Configuration
+firebase:
+  # Path to Firebase service account credentials JSON file
+  # You can also set GOOGLE_APPLICATION_CREDENTIALS environment variable instead
+  credentials:
+    path: ${FIREBASE_CREDENTIALS_PATH:}
+
+# Logging
+logging:
+  level:
+    com.tsu.fcmtest: INFO
+    com.google.firebase: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
