@@ -19,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -71,7 +72,7 @@ public class PushChannelDispatcher implements ChannelDispatcher {
                         outboxMessageRepository.save(outbox);
                         return;
                     }
-                    LocalDateTime now = LocalDateTime.now();
+                    Instant now = Instant.now();
                     recipient.setLastAttemptDate(now);
                     if (!enableNotification(recipient.getUserId())) {
                         recipient.setStatus(DeliveryStatus.skipped);
@@ -121,7 +122,7 @@ public class PushChannelDispatcher implements ChannelDispatcher {
                             recipientRepository.save(recipient);
                             log.info("Push sent successfully to at least one device: recipientId={}", recipient.getId());
                             outbox.setStatus(OutboxStatus.PROCESSED);
-                            outbox.setProcessedDate(LocalDateTime.now());
+                            outbox.setProcessedDate(Instant.now());
                             outboxMessageRepository.save(outbox);
                         } else {
                             handleFailure(outbox, recipient, !lastError.isEmpty() ? lastError.toString() : "Failed to send to all devices", "PUSH_FAILED");

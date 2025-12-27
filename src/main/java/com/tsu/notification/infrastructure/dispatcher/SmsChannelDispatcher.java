@@ -15,7 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -54,7 +54,7 @@ public class SmsChannelDispatcher implements ChannelDispatcher {
             outboxMessageRepository.save(outbox);
             return;
         }
-        LocalDateTime now = LocalDateTime.now();
+        Instant now = Instant.now();
         try {
             // Mark as processing
             sms.setLastAttemptDate(now);
@@ -74,7 +74,7 @@ public class SmsChannelDispatcher implements ChannelDispatcher {
                 smsMessageRepository.save(sms);
 
                 outbox.setStatus(OutboxStatus.PROCESSED);
-                outbox.setProcessedDate(LocalDateTime.now());
+                outbox.setProcessedDate(Instant.now());
                 outboxMessageRepository.save(outbox);
                 log.info("Sms sent successfully: id={}, providerId={}",
                         sms.getId(), result.getProviderId());

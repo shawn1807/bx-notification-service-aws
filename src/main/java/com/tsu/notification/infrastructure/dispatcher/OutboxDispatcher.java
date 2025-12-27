@@ -69,7 +69,7 @@ public class OutboxDispatcher {
             log.debug("Publishing outbox event to queue: id={}, type={}, aggregateId={}",
                     event.getId(), event.getEventType(), event.getMessageId());
 
-            event.setProcessingStartedDate(LocalDateTime.now());
+            event.setProcessingStartedDate(Instant.now());
             outboxMessageRepository.save(event);
             // Publish to message queue (decouples from event handler)
             String queueId = queuePublisher.publishOutboxEvent(event);

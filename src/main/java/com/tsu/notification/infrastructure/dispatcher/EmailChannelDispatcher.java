@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -53,7 +54,7 @@ public class EmailChannelDispatcher implements ChannelDispatcher {
             outboxMessageRepository.save(outbox);
             return;
         }
-        LocalDateTime now = LocalDateTime.now();
+        Instant now = Instant.now();
         try {
             // Mark as processing
             email.setLastAttemptDate(now);
@@ -74,7 +75,7 @@ public class EmailChannelDispatcher implements ChannelDispatcher {
                 emailMessageRepository.save(email);
 
                 outbox.setStatus(OutboxStatus.PROCESSED);
-                outbox.setProcessedDate(LocalDateTime.now());
+                outbox.setProcessedDate(Instant.now());
                 outboxMessageRepository.save(outbox);
                 log.info("Email sent successfully: id={}, providerId={}",
                         email.getId(), result.getProviderId());
