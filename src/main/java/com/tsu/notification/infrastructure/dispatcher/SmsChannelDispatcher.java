@@ -1,6 +1,6 @@
 package com.tsu.notification.infrastructure.dispatcher;
 
-import com.tsu.enums.MessageStatus;
+import com.tsu.notification.enums.MessageStatus;
 import com.tsu.enums.OutboxStatus;
 import com.tsu.notification.entities.OutboxMessageTb;
 import com.tsu.notification.entities.SmsMessageTb;

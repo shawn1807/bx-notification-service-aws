@@ -1,6 +1,6 @@
 package com.tsu.notification.infrastructure.dispatcher;
 
-import com.tsu.enums.MessageChannel;
+import com.tsu.notification.enums.MessageChannel;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

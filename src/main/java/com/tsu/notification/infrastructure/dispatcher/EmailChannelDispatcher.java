@@ -1,6 +1,6 @@
 package com.tsu.notification.infrastructure.dispatcher;
 
-import com.tsu.enums.MessageStatus;
+import com.tsu.notification.enums.MessageStatus;
 import com.tsu.enums.OutboxStatus;
 import com.tsu.notification.entities.EmailMessageTb;
 import com.tsu.notification.entities.OutboxMessageTb;
@@ -16,7 +16,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
