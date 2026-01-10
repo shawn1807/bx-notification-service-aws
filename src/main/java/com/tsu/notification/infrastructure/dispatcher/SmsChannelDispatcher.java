@@ -9,7 +9,7 @@ import com.tsu.notification.infrastructure.adapter.SmsSenderAdapter;
 import com.tsu.notification.infrastructure.queue.OutboxEventMessage;
 import com.tsu.notification.repo.OutboxMessageRepository;
 import com.tsu.notification.repo.SmsMessageRepository;
-import com.tsu.util.BackoffUtils;
+import com.tsu.common.util.BackoffUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

@@ -13,7 +13,7 @@ import com.tsu.notification.repo.DevicePushTokenRepository;
 import com.tsu.notification.repo.NotificationRecipientRepository;
 import com.tsu.notification.repo.NotificationRepository;
 import com.tsu.notification.repo.OutboxMessageRepository;
-import com.tsu.util.BackoffUtils;
+import com.tsu.common.util.BackoffUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
