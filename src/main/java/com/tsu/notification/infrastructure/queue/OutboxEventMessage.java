@@ -1,6 +1,6 @@
 package com.tsu.notification.infrastructure.queue;
 
-import com.tsu.notification.enums.MessageChannel;
+import com.tsu.common.enums.MessageChannel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
