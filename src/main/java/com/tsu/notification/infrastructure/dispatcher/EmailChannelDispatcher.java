@@ -1,9 +1,9 @@
 package com.tsu.notification.infrastructure.dispatcher;
 
 import com.tsu.notification.enums.MessageStatus;
-import com.tsu.enums.OutboxStatus;
 import com.tsu.notification.entities.EmailMessageTb;
 import com.tsu.notification.entities.OutboxMessageTb;
+import com.tsu.notification.enums.OutboxStatus;
 import com.tsu.notification.infrastructure.adapter.EmailSenderAdapter;
 import com.tsu.notification.infrastructure.adapter.SendResult;
 import com.tsu.notification.infrastructure.queue.OutboxEventMessage;

@@ -34,7 +34,7 @@
         </dependency>
         <dependency>
             <groupId>com.tsu</groupId>
-            <artifactId>bx-notification</artifactId>
+            <artifactId>bx-outbox</artifactId>
             <version>${parent.version}</version>
         </dependency>
         <dependency>
