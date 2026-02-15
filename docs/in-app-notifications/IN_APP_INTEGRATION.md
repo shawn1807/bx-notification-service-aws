@@ -685,7 +685,7 @@ class NotificationWebSocketManager: WebSocketDelegate {
 
 1. **Connection Management**
    - Implement reconnection logic with exponential backoff
-   - Handle network changes gracefully
+   - Handle network valueChangeds gracefully
    - Clean up connections on logout
 
 2. **Performance**

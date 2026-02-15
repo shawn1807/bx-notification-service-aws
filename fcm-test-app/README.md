@@ -191,7 +191,7 @@ Edit `src/main/resources/application.yml`:
 
 ```yaml
 server:
-  port: 8081  # Change port if needed
+  port: 8081  # ValueChange port if needed
 
 firebase:
   credentials:
@@ -199,7 +199,7 @@ firebase:
 
 logging:
   level:
-    com.tsu.fcmtest: DEBUG  # Change to DEBUG for more details
+    com.tsu.fcmtest: DEBUG  # ValueChange to DEBUG for more details
 ```
 
 ## Project Structure
