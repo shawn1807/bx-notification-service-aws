@@ -14,8 +14,8 @@
     <artifactId>bx-notification-service-aws</artifactId>
     <version>${project.parent.version}</version>
     <name>bx-notification</name>
+    <packaging>jar</packaging>
     <description>Production-ready notification system with outbox pattern</description>
-
     <properties>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
