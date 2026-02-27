@@ -1,15 +1,15 @@
 package com.tsu.notification.infrastructure.dispatcher;
 
-import com.tsu.notification.enums.MessageStatus;
-import com.tsu.enums.OutboxStatus;
 import com.tsu.notification.entities.OutboxMessageTb;
 import com.tsu.notification.entities.SmsMessageTb;
+import com.tsu.notification.enums.MessageStatus;
+import com.tsu.notification.enums.OutboxStatus;
 import com.tsu.notification.infrastructure.adapter.SendResult;
 import com.tsu.notification.infrastructure.adapter.SmsSenderAdapter;
 import com.tsu.notification.infrastructure.queue.OutboxEventMessage;
+import com.tsu.common.util.BackoffUtils;
 import com.tsu.notification.repo.OutboxMessageRepository;
 import com.tsu.notification.repo.SmsMessageRepository;
-import com.tsu.common.util.BackoffUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

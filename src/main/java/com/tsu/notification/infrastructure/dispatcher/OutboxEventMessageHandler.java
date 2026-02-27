@@ -1,6 +1,5 @@
 package com.tsu.notification.infrastructure.dispatcher;
 
-import com.tsu.enums.OutboxStatus;
 import com.tsu.notification.infrastructure.queue.OutboxEventMessage;
 import com.tsu.notification.repo.OutboxMessageRepository;
 import lombok.RequiredArgsConstructor;

@@ -29,12 +29,7 @@
     <dependencies>
         <dependency>
             <groupId>com.tsu</groupId>
-            <artifactId>bx-api</artifactId>
-            <version>${parent.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.tsu</groupId>
-            <artifactId>bx-outbox</artifactId>
+            <artifactId>bx-notification</artifactId>
             <version>${parent.version}</version>
         </dependency>
         <dependency>

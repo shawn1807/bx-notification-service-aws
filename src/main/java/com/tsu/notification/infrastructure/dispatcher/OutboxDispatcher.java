@@ -1,7 +1,6 @@
 package com.tsu.notification.infrastructure.dispatcher;
 
 import com.tsu.notification.entities.OutboxMessageTb;
-import com.tsu.enums.OutboxStatus;
 import com.tsu.notification.infrastructure.queue.QueuePublisher;
 import com.tsu.notification.repo.OutboxMessageRepository;
 import lombok.RequiredArgsConstructor;
